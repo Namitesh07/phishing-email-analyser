@@ -1,6 +1,6 @@
 # Phishing Email Analyser
 
-[Open the live demo](https://phishing-email-analyser.workspace-027574.chatgpt.site)
+[Open the live demo](https://namitesh07.github.io/phishing-email-analyser/)
 
 A privacy-first, educational phishing-email triage tool. Paste the text of a suspicious email and the analyser highlights visible warning signs, explains their fixed point values, and suggests safe next steps.
 
