@@ -1,6 +1,6 @@
 # Phishing Email Analyser
 
-[Open the live demo](https://namitesh07.github.io/phishing-email-analyser/)
+[Open the live demo](https://phishing-email-analyser.workspace-027574.chatgpt.site)
 
 A privacy-first, educational phishing-email triage tool. Paste the text of a suspicious email and the analyser highlights visible warning signs, explains their fixed point values, and suggests safe next steps.
 
@@ -17,8 +17,11 @@ Phishing detection should be understandable. Instead of producing a mysterious s
 - Explains each detected indicator and its fixed point value.
 - Checks for common social-engineering techniques, including urgency, account threats, credential requests, payment requests, suspicious links, impersonation language, and risky attachments.
 - Reads pasted email headers when available, including From/Reply-To differences and SPF, DKIM, and DMARC failures.
+- Shows extracted URLs as non-clickable, plain-text evidence with the configured technical warning signs.
+- Summarises pasted sender and authentication headers in a dedicated Header checks panel.
 - Includes six fictional, safe practice emails for learning.
 - Provides practical recommendations without opening links or attachments.
+- Copies or downloads a local assessment report without including the pasted email body.
 
 ## Privacy by design
 
@@ -27,6 +30,7 @@ All analysis happens locally in the browser using plain JavaScript.
 - No email content is uploaded.
 - No database, accounts, tracking, telemetry, AI service, or external API is used.
 - The site can be hosted as a completely static website.
+- Downloaded reports are generated locally and omit the pasted message body by default.
 
 ## Technology
 

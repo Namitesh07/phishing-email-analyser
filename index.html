@@ -253,6 +253,41 @@
                 </div>
                 <ul id="recommendationsList" class="recommendations-list"></ul>
               </section>
+
+              <section class="evidence-section" aria-labelledby="linkEvidenceTitle">
+                <div class="section-row evidence-section-heading">
+                  <div>
+                    <h3 id="linkEvidenceTitle">Extracted link evidence</h3>
+                    <p>Displayed as plain text only. This tool never opens links.</p>
+                  </div>
+                  <span id="linkEvidenceCount" class="evidence-count">0 links</span>
+                </div>
+                <div id="linkEvidenceList" class="url-evidence-list"></div>
+              </section>
+
+              <section class="evidence-section" aria-labelledby="headerEvidenceTitle">
+                <div class="section-row evidence-section-heading">
+                  <div>
+                    <h3 id="headerEvidenceTitle">Header checks</h3>
+                    <p>Only assessed when headers are included in the pasted email.</p>
+                  </div>
+                  <span id="headerEvidenceState" class="evidence-count">No headers</span>
+                </div>
+                <div id="headerEvidenceList" class="header-evidence-list"></div>
+              </section>
+
+              <section class="report-tools" aria-labelledby="reportToolsTitle">
+                <div>
+                  <p class="section-kicker">Case handoff</p>
+                  <h3 id="reportToolsTitle">Keep a local assessment report</h3>
+                  <p>The report excludes the pasted email body. Copy or download it only if it is appropriate to share the recorded evidence.</p>
+                </div>
+                <div class="report-actions">
+                  <button id="copyReportButton" class="button button-secondary" type="button">Copy report</button>
+                  <button id="downloadReportButton" class="button button-secondary" type="button">Download .txt</button>
+                </div>
+                <p id="reportStatus" class="report-status" aria-live="polite"></p>
+              </section>
             </div>
           </aside>
         </section>

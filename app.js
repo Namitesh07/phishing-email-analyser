@@ -155,6 +155,7 @@
   RULES.forEach(function (rule) {
     RULE_BY_ID[rule.id] = rule;
   });
+  var latestResult = null;
 
   var EXAMPLES = {
     obvious: [
@@ -283,6 +284,13 @@
       scoreRange: document.getElementById("scoreRange"),
       findings: document.getElementById("findingsList"),
       recommendations: document.getElementById("recommendationsList"),
+      linkEvidence: document.getElementById("linkEvidenceList"),
+      linkEvidenceCount: document.getElementById("linkEvidenceCount"),
+      headerEvidence: document.getElementById("headerEvidenceList"),
+      headerEvidenceState: document.getElementById("headerEvidenceState"),
+      copyReportButton: document.getElementById("copyReportButton"),
+      downloadReportButton: document.getElementById("downloadReportButton"),
+      reportStatus: document.getElementById("reportStatus"),
       rulesList: document.getElementById("rulesList")
     };
   }
@@ -497,47 +505,55 @@
     });
   }
 
-  function detectLinkWarnings(text, findings) {
-    var links = extractLinks(text);
+  function inspectLink(link) {
+    var suspiciousReasons = [];
+    var rawIp = isIpv4(link.host) || (link.host.indexOf(":") >= 0 && /^[0-9a-f:]+$/i.test(link.host));
+
+    if (link.protocol === "http:") {
+      suspiciousReasons.push("uses plain HTTP");
+    }
+    if (link.port && link.port !== "80" && link.port !== "443") {
+      suspiciousReasons.push("uses a non-standard port");
+    }
+    if (link.username || link.raw.indexOf("@") >= 0) {
+      suspiciousReasons.push("contains an @ sign before the destination");
+    }
+    if (link.host.indexOf("xn--") === 0 || link.host.indexOf(".xn--") >= 0) {
+      suspiciousReasons.push("uses a punycode hostname");
+    }
+    if (hasLookalike(link.host)) {
+      suspiciousReasons.push("looks similar to a well-known brand name");
+    }
+
+    var shown = link.text ? visibleHost(link.text) : "";
+    return {
+      suspiciousReasons: suspiciousReasons,
+      shortened: SHORTENER_HOSTS.indexOf(link.host) >= 0,
+      rawIp: rawIp,
+      misleading: Boolean(shown && !domainsRelated(shown, link.host)),
+      shownHost: shown
+    };
+  }
+
+  function detectLinkWarnings(links, findings) {
     var suspiciousHosts = [];
     var shortenedHosts = [];
     var ipHosts = [];
     var mismatches = [];
 
     links.forEach(function (link) {
-      var reasons = [];
-      var rawIp = isIpv4(link.host) || (link.host.indexOf(":") >= 0 && /^[0-9a-f:]+$/i.test(link.host));
-
-      if (link.protocol === "http:") {
-        reasons.push("uses plain HTTP");
+      var inspection = inspectLink(link);
+      if (inspection.suspiciousReasons.length) {
+        suspiciousHosts.push(link.host + " (" + inspection.suspiciousReasons.join("; ") + ")");
       }
-      if (link.port && link.port !== "80" && link.port !== "443") {
-        reasons.push("uses a non-standard port");
-      }
-      if (link.username || link.raw.indexOf("@") >= 0) {
-        reasons.push("contains an @ sign before the destination");
-      }
-      if (link.host.indexOf("xn--") === 0 || link.host.indexOf(".xn--") >= 0) {
-        reasons.push("uses a punycode hostname");
-      }
-      if (hasLookalike(link.host)) {
-        reasons.push("looks similar to a well-known brand name");
-      }
-
-      if (reasons.length) {
-        suspiciousHosts.push(link.host + " (" + reasons.join("; ") + ")");
-      }
-      if (SHORTENER_HOSTS.indexOf(link.host) >= 0) {
+      if (inspection.shortened) {
         shortenedHosts.push(link.host);
       }
-      if (rawIp) {
+      if (inspection.rawIp) {
         ipHosts.push(link.host);
       }
-      if (link.text) {
-        var shown = visibleHost(link.text);
-        if (shown && !domainsRelated(shown, link.host)) {
-          mismatches.push("shown as " + shown + " but points to " + link.host);
-        }
+      if (inspection.misleading) {
+        mismatches.push("shown as " + inspection.shownHost + " but points to " + link.host);
       }
     });
 
@@ -683,6 +699,26 @@
     }
   }
 
+  function getAuthenticationStatus(authenticationText, mechanism) {
+    var match = authenticationText.match(new RegExp("\\b" + mechanism + "\\s*=\\s*(pass|fail|softfail|temperror|permerror|neutral|none)\\b", "i"));
+    if (!match && mechanism === "spf") {
+      match = authenticationText.match(/\breceived-spf:\s*(pass|fail|softfail|temperror|permerror|neutral|none)\b/i);
+    }
+    return match ? match[1].toLowerCase() : "not-found";
+  }
+
+  function buildHeaderSummary(headers, headerText) {
+    var authenticationText = (headerText + "\n" + getHeader(headers, "authentication-results") + "\n" + getHeader(headers, "received-spf")).toLowerCase();
+    return {
+      available: Boolean(headerText),
+      fromDomain: getAddressDomain(getHeader(headers, "from")),
+      replyDomain: getAddressDomain(getHeader(headers, "reply-to")),
+      spf: getAuthenticationStatus(authenticationText, "spf"),
+      dkim: getAuthenticationStatus(authenticationText, "dkim"),
+      dmarc: getAuthenticationStatus(authenticationText, "dmarc")
+    };
+  }
+
   function classify(score) {
     if (score >= 60) {
       return {
@@ -711,9 +747,10 @@
   function analyseEmail(input) {
     var split = splitEmail(input);
     var headers = parseHeaders(split.headerText);
+    var links = extractLinks(split.all);
     var findings = [];
     detectTextWarnings(split.all, findings);
-    detectLinkWarnings(split.all, findings);
+    detectLinkWarnings(links, findings);
     detectHeaderWarnings(headers, split.headerText, findings);
     findings.sort(function (first, second) {
       return second.rule.points - first.rule.points || first.rule.label.localeCompare(second.rule.label);
@@ -728,7 +765,9 @@
       rawScore: rawScore,
       score: score,
       classification: classify(score),
-      headersPresent: Boolean(split.headerText)
+      headersPresent: Boolean(split.headerText),
+      links: links,
+      headerSummary: buildHeaderSummary(headers, split.headerText)
     };
   }
 
@@ -866,8 +905,210 @@
     });
   }
 
+  function linkEvidenceLabels(link) {
+    var inspection = inspectLink(link);
+    var labels = [];
+    inspection.suspiciousReasons.forEach(function (reason) {
+      labels.push({ label: reason, tone: "warning" });
+    });
+    if (inspection.shortened) {
+      labels.push({ label: "shortened URL", tone: "warning" });
+    }
+    if (inspection.rawIp) {
+      labels.push({ label: "raw IP address", tone: "high" });
+    }
+    if (inspection.misleading) {
+      labels.push({ label: "visible text differs", tone: "high" });
+    }
+    if (!labels.length) {
+      labels.push({ label: "no configured technical flag", tone: "neutral" });
+    }
+    return labels;
+  }
+
+  function addEvidenceFlag(container, label, tone) {
+    var flag = document.createElement("span");
+    flag.className = "evidence-flag evidence-" + tone;
+    flag.textContent = label;
+    container.appendChild(flag);
+  }
+
+  function renderLinkEvidence(dom, result) {
+    clearChildren(dom.linkEvidence);
+    var links = result.links || [];
+    dom.linkEvidenceCount.textContent = links.length + (links.length === 1 ? " link" : " links");
+
+    if (!links.length) {
+      var noLinks = document.createElement("div");
+      noLinks.className = "no-evidence";
+      noLinks.textContent = "No HTTP(S) or www links were found in the pasted text.";
+      dom.linkEvidence.appendChild(noLinks);
+      return;
+    }
+
+    links.forEach(function (link) {
+      var card = document.createElement("article");
+      card.className = "url-evidence-card";
+      var code = document.createElement("code");
+      code.textContent = link.raw;
+      var host = document.createElement("p");
+      host.textContent = "Destination host: " + (link.host || "not available");
+      var flags = document.createElement("div");
+      flags.className = "evidence-flags";
+      linkEvidenceLabels(link).forEach(function (item) {
+        addEvidenceFlag(flags, item.label, item.tone);
+      });
+
+      card.appendChild(code);
+      card.appendChild(host);
+      card.appendChild(flags);
+      dom.linkEvidence.appendChild(card);
+    });
+  }
+
+  function authenticationDisplay(status) {
+    if (status === "pass") {
+      return { label: "Pass", tone: "pass" };
+    }
+    if (["fail", "softfail", "temperror", "permerror"].indexOf(status) >= 0) {
+      return { label: status === "softfail" ? "Soft fail" : status.charAt(0).toUpperCase() + status.slice(1), tone: "fail" };
+    }
+    if (status === "neutral" || status === "none") {
+      return { label: status.charAt(0).toUpperCase() + status.slice(1), tone: "neutral" };
+    }
+    return { label: "Not found", tone: "unknown" };
+  }
+
+  function addHeaderCheck(container, label, value, tone) {
+    var item = document.createElement("div");
+    item.className = "header-check";
+    var name = document.createElement("span");
+    name.textContent = label;
+    var status = document.createElement("strong");
+    status.className = "header-status header-" + tone;
+    status.textContent = value;
+    item.appendChild(name);
+    item.appendChild(status);
+    container.appendChild(item);
+  }
+
+  function renderHeaderEvidence(dom, result) {
+    clearChildren(dom.headerEvidence);
+    var summary = result.headerSummary;
+    dom.headerEvidenceState.textContent = summary.available ? "Headers included" : "No headers";
+
+    if (!summary.available) {
+      var noHeaders = document.createElement("div");
+      noHeaders.className = "no-evidence";
+      noHeaders.textContent = "Paste the full email, including headers, to check sender domains and email authentication results.";
+      dom.headerEvidence.appendChild(noHeaders);
+      return;
+    }
+
+    addHeaderCheck(dom.headerEvidence, "From domain", summary.fromDomain || "Not found", summary.fromDomain ? "neutral" : "unknown");
+    addHeaderCheck(dom.headerEvidence, "Reply-To domain", summary.replyDomain || "Not found", summary.replyDomain ? "neutral" : "unknown");
+    [
+      { label: "SPF", status: summary.spf },
+      { label: "DKIM", status: summary.dkim },
+      { label: "DMARC", status: summary.dmarc }
+    ].forEach(function (check) {
+      var display = authenticationDisplay(check.status);
+      addHeaderCheck(dom.headerEvidence, check.label, display.label, display.tone);
+    });
+  }
+
+  function reportText(result) {
+    var lines = [
+      "PHISHING EMAIL ANALYSER — LOCAL ASSESSMENT REPORT",
+      "Generated locally in this browser. The pasted email body is not included.",
+      "",
+      "Risk score: " + result.score + "/100 (" + result.classification.label + ")",
+      "Detected signals: " + result.findings.length,
+      "Raw rule points: " + result.rawScore,
+      "",
+      "RECORDED INDICATORS"
+    ];
+
+    if (result.findings.length) {
+      result.findings.forEach(function (finding) {
+        lines.push("- +" + finding.rule.points + " " + finding.rule.label + ": " + finding.detail);
+      });
+    } else {
+      lines.push("- No configured warning signs were detected. This is not proof that the email is genuine.");
+    }
+
+    lines.push("", "EXTRACTED LINK EVIDENCE");
+    if (result.links.length) {
+      result.links.forEach(function (link) {
+        lines.push("- " + link.raw + " | host: " + link.host + " | " + linkEvidenceLabels(link).map(function (item) { return item.label; }).join(", "));
+      });
+    } else {
+      lines.push("- No HTTP(S) or www links found.");
+    }
+
+    lines.push("", "HEADER CHECKS");
+    if (result.headerSummary.available) {
+      lines.push("- From domain: " + (result.headerSummary.fromDomain || "Not found"));
+      lines.push("- Reply-To domain: " + (result.headerSummary.replyDomain || "Not found"));
+      ["spf", "dkim", "dmarc"].forEach(function (mechanism) {
+        lines.push("- " + mechanism.toUpperCase() + ": " + authenticationDisplay(result.headerSummary[mechanism]).label);
+      });
+    } else {
+      lines.push("- No recognised headers were included.");
+    }
+
+    lines.push("", "RECOMMENDED PROTOCOL");
+    recommendationItems(result).forEach(function (item) {
+      lines.push("- " + item);
+    });
+    lines.push("", "This educational triage result is not a definitive determination that an email is safe or malicious.");
+    return lines.join("\n");
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var temporary = document.createElement("textarea");
+      temporary.value = text;
+      temporary.setAttribute("readonly", "");
+      temporary.style.position = "fixed";
+      temporary.style.opacity = "0";
+      document.body.appendChild(temporary);
+      temporary.select();
+      var copied = document.execCommand("copy");
+      document.body.removeChild(temporary);
+      if (copied) {
+        resolve();
+      } else {
+        reject(new Error("Copy was unavailable."));
+      }
+    });
+  }
+
+  function downloadReport(result) {
+    var blob = new Blob([reportText(result)], { type: "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "phishing-email-assessment-report.txt";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+  }
+
+  function resetRenderedResult(dom) {
+    latestResult = null;
+    dom.emptyState.hidden = false;
+    dom.results.hidden = true;
+    dom.reportStatus.textContent = "";
+  }
+
   function renderResult(dom, result) {
     var risk = result.classification;
+    latestResult = result;
     dom.emptyState.hidden = true;
     dom.results.hidden = false;
     dom.riskSummary.setAttribute("data-risk", risk.key);
@@ -886,6 +1127,9 @@
       : "The detected rules add to " + result.rawScore + " points. Low: 0–19 · Suspicious: 20–59 · High: 60–100.";
     renderFindings(dom, result);
     renderRecommendations(dom, result);
+    renderLinkEvidence(dom, result);
+    renderHeaderEvidence(dom, result);
+    dom.reportStatus.textContent = "";
   }
 
   function updateStats(dom) {
@@ -916,6 +1160,7 @@
     dom.clearButton.addEventListener("click", function () {
       dom.input.value = "";
       dom.textareaShell.classList.remove("input-error");
+      resetRenderedResult(dom);
       updateStats(dom);
       dom.status.textContent = "Email content cleared from this page.";
       dom.input.focus();
@@ -924,6 +1169,10 @@
     dom.input.addEventListener("input", function () {
       dom.textareaShell.classList.remove("input-error");
       updateStats(dom);
+      if (!dom.results.hidden) {
+        resetRenderedResult(dom);
+        dom.status.textContent = "Email content changed. Inspect evidence again to update the assessment.";
+      }
     });
 
     dom.input.addEventListener("keydown", function (event) {
@@ -937,10 +1186,30 @@
       button.addEventListener("click", function () {
         var key = button.getAttribute("data-example");
         dom.input.value = EXAMPLES[key];
+        resetRenderedResult(dom);
         updateStats(dom);
         dom.input.focus();
         dom.status.textContent = "Fictional example loaded. Select Analyse email to inspect it.";
       });
+    });
+
+    dom.copyReportButton.addEventListener("click", function () {
+      if (!latestResult) {
+        return;
+      }
+      copyText(reportText(latestResult)).then(function () {
+        dom.reportStatus.textContent = "Assessment report copied locally. The pasted email body was not included.";
+      }).catch(function () {
+        dom.reportStatus.textContent = "Copy was blocked by this browser. You can download the local .txt report instead.";
+      });
+    });
+
+    dom.downloadReportButton.addEventListener("click", function () {
+      if (!latestResult) {
+        return;
+      }
+      downloadReport(latestResult);
+      dom.reportStatus.textContent = "Local .txt report downloaded. The pasted email body was not included.";
     });
   }
 
