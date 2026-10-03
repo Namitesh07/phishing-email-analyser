@@ -16,7 +16,7 @@ Phishing detection should be understandable. Instead of producing a mysterious s
 - Classifies messages as Low Risk, Suspicious, or High Risk.
 - Explains each detected indicator and its fixed point value.
 - Checks for common social-engineering techniques, including urgency, account threats, credential requests, payment requests, suspicious links, impersonation language, and risky attachments.
-- Reads pasted email headers when available, including From/Reply-To differences and SPF, DKIM, and DMARC failures.
+- Reads pasted email headers when available, including From/Reply-To differences, recognised brand-style sender names using unexpected From domains, and SPF, DKIM, and DMARC failures.
 - Shows extracted URLs as non-clickable, plain-text evidence with the configured technical warning signs.
 - Summarises pasted sender and authentication headers in a dedicated Header checks panel.
 - Includes six fictional, safe practice emails for learning.
@@ -30,7 +30,7 @@ All analysis happens locally in the browser using plain JavaScript.
 - No email content is uploaded.
 - No database, accounts, tracking, telemetry, AI service, or external API is used.
 - The site can be hosted as a completely static website.
-- Downloaded reports are generated locally and omit the pasted message body by default.
+- Downloaded reports are generated locally, omit the pasted message body, and redact URL query parameters and fragments.
 
 ## Technology
 

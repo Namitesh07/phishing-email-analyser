@@ -129,6 +129,13 @@
       explanation: "A different Reply-To address can redirect replies away from the apparent sender."
     },
     {
+      id: "senderBrandMismatch",
+      points: 15,
+      category: "Header",
+      label: "Recognised brand name with unexpected From domain",
+      explanation: "The sender display name claims a recognised brand, but the From address does not use a configured official domain for that brand."
+    },
+    {
       id: "spfFail",
       points: 16,
       category: "Header",
@@ -262,6 +269,19 @@
     /docusign[-_]?secure/i
   ];
 
+  var RECOGNISED_SENDER_BRANDS = [
+    { label: "Microsoft", pattern: /\b(?:microsoft(?:\s+365)?|office\s*365|outlook)\b/i, domains: ["microsoft.com", "microsoftonline.com", "microsoft365.com", "office.com", "office365.com", "outlook.com", "live.com"] },
+    { label: "Google", pattern: /\b(?:google|gmail)\b/i, domains: ["google.com", "gmail.com", "googlemail.com"] },
+    { label: "Apple", pattern: /\b(?:apple|icloud)\b/i, domains: ["apple.com", "icloud.com", "me.com"] },
+    { label: "Amazon", pattern: /\bamazon\b/i, domains: ["amazon.com", "amazon.in", "amazon.co.uk"] },
+    { label: "PayPal", pattern: /\bpaypal\b/i, domains: ["paypal.com", "paypal.me"] },
+    { label: "Adobe", pattern: /\badobe\b/i, domains: ["adobe.com"] },
+    { label: "Dropbox", pattern: /\bdropbox\b/i, domains: ["dropbox.com"] },
+    { label: "Netflix", pattern: /\bnetflix\b/i, domains: ["netflix.com"] },
+    { label: "DHL", pattern: /\bdhl\b/i, domains: ["dhl.com"] },
+    { label: "FedEx", pattern: /\bfedex\b/i, domains: ["fedex.com"] }
+  ];
+
   function getDom() {
     return {
       input: document.getElementById("emailInput"),
@@ -386,6 +406,27 @@
     return email ? email[1].toLowerCase().replace(/\.+$/, "") : "";
   }
 
+  function getAddressDisplayName(value) {
+    return String(value || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/["']/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function recognisedSenderBrand(fromValue) {
+    var displayName = getAddressDisplayName(fromValue);
+    return RECOGNISED_SENDER_BRANDS.find(function (brand) {
+      return brand.pattern.test(displayName);
+    }) || null;
+  }
+
+  function isConfiguredBrandDomain(domain, brand) {
+    return Boolean(domain && brand && brand.domains.some(function (trustedDomain) {
+      return domainsRelated(domain, trustedDomain);
+    }));
+  }
+
   function domainsRelated(first, second) {
     if (!first || !second) {
       return true;
@@ -497,6 +538,12 @@
     }
 
     return results;
+  }
+
+  function removeUrlLikeText(value) {
+    return String(value || "")
+      .replace(/\b(?:https?:\/\/|www\.)[^\s<>"')\]]+/gi, " ")
+      .replace(/\b(?:[a-z0-9-]+\.)+(?:com|org|net|edu|gov|co|io|info|biz|in|uk|de|fr|au|ca|us|dev|app|ai|xyz|tech|site|online)(?::\d+)?(?:\/[^\s<>"')\]]*)?/gi, " ");
   }
 
   function hasLookalike(host) {
@@ -647,7 +694,7 @@
       addFinding(findings, "unusualAttachment", "Named attachment: " + quotedTerms(unusualAttachment, 3) + ".");
     }
 
-    var executableAttachment = uniqueMatches(text, [
+    var executableAttachment = uniqueMatches(removeUrlLikeText(text), [
       /\b[a-z0-9][a-z0-9_().\-\[\] ]{0,80}\.(?:exe|scr|js|jse|vbs|vbe|bat|cmd|ps1|msi|jar|lnk|hta|com|pif)\b/gi
     ]);
     if (executableAttachment.length) {
@@ -681,10 +728,16 @@
   }
 
   function detectHeaderWarnings(headers, headerText, findings) {
-    var fromDomain = getAddressDomain(getHeader(headers, "from"));
+    var fromHeader = getHeader(headers, "from");
+    var fromDomain = getAddressDomain(fromHeader);
     var replyDomain = getAddressDomain(getHeader(headers, "reply-to"));
     if (fromDomain && replyDomain && !domainsRelated(fromDomain, replyDomain)) {
       addFinding(findings, "replyToMismatch", "From uses " + fromDomain + " while Reply-To uses " + replyDomain + ".");
+    }
+
+    var senderBrand = recognisedSenderBrand(fromHeader);
+    if (senderBrand && fromDomain && !isConfiguredBrandDomain(fromDomain, senderBrand)) {
+      addFinding(findings, "senderBrandMismatch", "Display name claims " + senderBrand.label + ", but From uses " + fromDomain + " instead of a configured " + senderBrand.label + " domain.");
     }
 
     var authenticationText = (headerText + "\n" + getHeader(headers, "authentication-results") + "\n" + getHeader(headers, "received-spf")).toLowerCase();
@@ -801,7 +854,7 @@
     if (ids.some(function (id) { return ["paymentRequest", "giftCardRequest", "bankChange", "invoiceLanguage"].indexOf(id) >= 0; })) {
       add("Confirm payment or bank-detail changes using a known phone number or an existing official contact, not this email.");
     }
-    if (ids.some(function (id) { return ["replyToMismatch", "spfFail", "dkimFail", "dmarcFail"].indexOf(id) >= 0; })) {
+    if (ids.some(function (id) { return ["replyToMismatch", "senderBrandMismatch", "spfFail", "dkimFail", "dmarcFail"].indexOf(id) >= 0; })) {
       add("Keep the original email and report it through your organisation’s normal security or phishing-reporting process.");
     }
     add("If this concerns a real account, use the official website, app, or a contact address you already trust to check it.");
@@ -926,6 +979,14 @@
     return labels;
   }
 
+  function redactedUrlForReport(link) {
+    var parsed = toUrl(link && (link.href || link.raw));
+    if (!parsed) {
+      return "[unavailable URL]";
+    }
+    return parsed.protocol + "//" + parsed.host + (parsed.pathname || "/");
+  }
+
   function addEvidenceFlag(container, label, tone) {
     var flag = document.createElement("span");
     flag.className = "evidence-flag evidence-" + tone;
@@ -1020,7 +1081,7 @@
   function reportText(result) {
     var lines = [
       "PHISHING EMAIL ANALYSER — LOCAL ASSESSMENT REPORT",
-      "Generated locally in this browser. The pasted email body is not included.",
+      "Generated locally in this browser. The pasted email body is not included; URL query parameters and fragments are redacted.",
       "",
       "Risk score: " + result.score + "/100 (" + result.classification.label + ")",
       "Detected signals: " + result.findings.length,
@@ -1040,7 +1101,7 @@
     lines.push("", "EXTRACTED LINK EVIDENCE");
     if (result.links.length) {
       result.links.forEach(function (link) {
-        lines.push("- " + link.raw + " | host: " + link.host + " | " + linkEvidenceLabels(link).map(function (item) { return item.label; }).join(", "));
+        lines.push("- " + redactedUrlForReport(link) + " | host: " + link.host + " | " + linkEvidenceLabels(link).map(function (item) { return item.label; }).join(", "));
       });
     } else {
       lines.push("- No HTTP(S) or www links found.");
@@ -1198,7 +1259,7 @@
         return;
       }
       copyText(reportText(latestResult)).then(function () {
-        dom.reportStatus.textContent = "Assessment report copied locally. The pasted email body was not included.";
+        dom.reportStatus.textContent = "Assessment report copied locally. The pasted email body and URL query details were not included.";
       }).catch(function () {
         dom.reportStatus.textContent = "Copy was blocked by this browser. You can download the local .txt report instead.";
       });
@@ -1209,7 +1270,7 @@
         return;
       }
       downloadReport(latestResult);
-      dom.reportStatus.textContent = "Local .txt report downloaded. The pasted email body was not included.";
+      dom.reportStatus.textContent = "Local .txt report downloaded. The pasted email body and URL query details were not included.";
     });
   }
 
