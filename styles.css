@@ -2228,3 +2228,30 @@ footer {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Keep each desktop column flowing independently, even when one assessment is longer. */
+.analysis-column .learning-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 0;
+}
+
+.footer-details {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.creator-credit {
+  color: var(--aqua-bright);
+  font-weight: 800;
+}
+
+@media (max-width: 520px) {
+  .footer-details {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.28rem;
+  }
+}
