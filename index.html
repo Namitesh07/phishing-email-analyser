@@ -192,6 +192,24 @@
 
               <p class="guide-reminder"><span aria-hidden="true">!</span> Never share passwords, recovery codes, or MFA/OTP codes by email.</p>
             </aside>
+            <section class="learning-grid" aria-label="How to use the analyser">
+              <article class="learning-card">
+                <p class="section-kicker">Method notes</p>
+                <h2>Nothing is hidden behind the score.</h2>
+                <p>Each rule has a fixed point value. A score of 100 means the combined signals reached the cap; it does not mean the email is definitively malicious.</p>
+                <details>
+                  <summary>View all scoring rules</summary>
+                  <ul id="rulesList" class="rules-list"></ul>
+                </details>
+              </article>
+              <article class="learning-card safety-card">
+                <p class="section-kicker">Verification rule</p>
+                <h2>Verify outside the message.</h2>
+                <p>Use an organisation’s official website or app, or a known phone number or address. Do not use contact details or links provided in the suspicious message itself.</p>
+                <p class="learning-footnote">This tool does not inspect attachments, visit links, or contact any outside service.</p>
+              </article>
+            </section>
+
           </div>
 
           <aside class="panel results-panel" aria-labelledby="resultsTitle">
@@ -292,28 +310,14 @@
           </aside>
         </section>
 
-        <section class="learning-grid" aria-label="How to use the analyser">
-          <article class="learning-card">
-            <p class="section-kicker">Method notes</p>
-            <h2>Nothing is hidden behind the score.</h2>
-            <p>Each rule has a fixed point value. A score of 100 means the combined signals reached the cap; it does not mean the email is definitively malicious.</p>
-            <details>
-              <summary>View all scoring rules</summary>
-              <ul id="rulesList" class="rules-list"></ul>
-            </details>
-          </article>
-          <article class="learning-card safety-card">
-            <p class="section-kicker">Verification rule</p>
-            <h2>Verify outside the message.</h2>
-            <p>Use an organisation’s official website or app, or a known phone number or address. Do not use contact details or links provided in the suspicious message itself.</p>
-            <p class="learning-footnote">This tool does not inspect attachments, visit links, or contact any outside service.</p>
-          </article>
-        </section>
       </main>
 
       <footer>
         <span>Phishing Email Analyser · Case File Edition</span>
-        <span>Local case engine · No telemetry · Educational use</span>
+        <div class="footer-details">
+          <span>Local case engine · No telemetry · Educational use</span>
+          <span class="creator-credit">Created by Namitesh Pandey</span>
+        </div>
       </footer>
     </div>
 
