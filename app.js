@@ -163,6 +163,7 @@
     RULE_BY_ID[rule.id] = rule;
   });
   var latestResult = null;
+  var DISPLAY_PREFERENCE_KEY = "phishing-email-analyser-display-preferences-v1";
 
   var EXAMPLES = {
     obvious: [
@@ -301,6 +302,7 @@
       resultCount: document.getElementById("resultCount"),
       scoreFormula: document.getElementById("scoreFormula"),
       rawScoreBadge: document.getElementById("rawScoreBadge"),
+      scoreBreakdown: document.getElementById("scoreBreakdownList"),
       scoreRange: document.getElementById("scoreRange"),
       findings: document.getElementById("findingsList"),
       recommendations: document.getElementById("recommendationsList"),
@@ -311,7 +313,10 @@
       copyReportButton: document.getElementById("copyReportButton"),
       downloadReportButton: document.getElementById("downloadReportButton"),
       reportStatus: document.getElementById("reportStatus"),
-      rulesList: document.getElementById("rulesList")
+      rulesList: document.getElementById("rulesList"),
+      largeTextButton: document.getElementById("largeTextButton"),
+      highContrastButton: document.getElementById("highContrastButton"),
+      displayStatus: document.getElementById("displayStatus")
     };
   }
 
@@ -901,6 +906,60 @@
     });
   }
 
+  function scoreBreakdown(result) {
+    var categories = {};
+    result.findings.forEach(function (finding) {
+      var name = finding.rule.category || "Other";
+      categories[name] = (categories[name] || 0) + finding.rule.points;
+    });
+    return Object.keys(categories).map(function (name) {
+      return { name: name, points: categories[name] };
+    }).sort(function (first, second) {
+      return second.points - first.points || first.name.localeCompare(second.name);
+    });
+  }
+
+  function renderScoreBreakdown(dom, result) {
+    clearChildren(dom.scoreBreakdown);
+    var categories = scoreBreakdown(result);
+    if (!categories.length) {
+      var empty = document.createElement("p");
+      empty.className = "no-evidence";
+      empty.textContent = "No configured warning signs were recorded, so there are no category points to display.";
+      dom.scoreBreakdown.appendChild(empty);
+      return;
+    }
+
+    var maximum = Math.max(result.rawScore, 1);
+    categories.forEach(function (category) {
+      var row = document.createElement("div");
+      row.className = "score-breakdown-row";
+      var labels = document.createElement("div");
+      labels.className = "score-breakdown-labels";
+      var name = document.createElement("span");
+      name.textContent = category.name;
+      var points = document.createElement("strong");
+      points.textContent = category.points + " point" + (category.points === 1 ? "" : "s");
+      labels.appendChild(name);
+      labels.appendChild(points);
+
+      var track = document.createElement("div");
+      track.className = "score-breakdown-track";
+      track.setAttribute("role", "progressbar");
+      track.setAttribute("aria-label", category.name + " contributes " + category.points + " of " + result.rawScore + " raw points");
+      track.setAttribute("aria-valuemin", "0");
+      track.setAttribute("aria-valuemax", String(result.rawScore));
+      track.setAttribute("aria-valuenow", String(category.points));
+      var bar = document.createElement("span");
+      bar.className = "score-breakdown-bar";
+      bar.style.width = (category.points / maximum * 100).toFixed(1) + "%";
+      track.appendChild(bar);
+      row.appendChild(labels);
+      row.appendChild(track);
+      dom.scoreBreakdown.appendChild(row);
+    });
+  }
+
   function renderFindings(dom, result) {
     clearChildren(dom.findings);
     if (!result.findings.length) {
@@ -1186,6 +1245,7 @@
     dom.scoreFormula.textContent = result.rawScore > 100
       ? "The detected rules add to " + result.rawScore + " points. Scores are capped at 100 so the result remains easy to compare."
       : "The detected rules add to " + result.rawScore + " points. Low: 0–19 · Suspicious: 20–59 · High: 60–100.";
+    renderScoreBreakdown(dom, result);
     renderFindings(dom, result);
     renderRecommendations(dom, result);
     renderLinkEvidence(dom, result);
@@ -1199,10 +1259,62 @@
     dom.stats.textContent = length.toLocaleString() + " character" + (length === 1 ? "" : "s") + " · " + lines + " line" + (lines === 1 ? "" : "s");
   }
 
+  function readDisplayPreferences() {
+    try {
+      var stored = window.localStorage.getItem(DISPLAY_PREFERENCE_KEY);
+      var value = stored ? JSON.parse(stored) : {};
+      return {
+        largeText: Boolean(value.largeText),
+        highContrast: Boolean(value.highContrast)
+      };
+    } catch (error) {
+      return { largeText: false, highContrast: false };
+    }
+  }
+
+  function saveDisplayPreferences(preferences) {
+    try {
+      window.localStorage.setItem(DISPLAY_PREFERENCE_KEY, JSON.stringify(preferences));
+    } catch (error) {
+      // Display controls still work for this page even when storage is unavailable.
+    }
+  }
+
+  function applyDisplayPreferences(dom, preferences) {
+    document.documentElement.style.setProperty("--user-font-scale", preferences.largeText ? "1.125" : "1");
+    document.body.classList.toggle("high-contrast", preferences.highContrast);
+    dom.largeTextButton.setAttribute("aria-pressed", String(preferences.largeText));
+    dom.highContrastButton.setAttribute("aria-pressed", String(preferences.highContrast));
+  }
+
+  function setDisplayStatus(dom, message) {
+    dom.displayStatus.textContent = message;
+  }
+
+  function initialiseDisplayControls(dom) {
+    var preferences = readDisplayPreferences();
+    applyDisplayPreferences(dom, preferences);
+
+    dom.largeTextButton.addEventListener("click", function () {
+      preferences.largeText = !preferences.largeText;
+      applyDisplayPreferences(dom, preferences);
+      saveDisplayPreferences(preferences);
+      setDisplayStatus(dom, preferences.largeText ? "Large text enabled." : "Large text disabled.");
+    });
+
+    dom.highContrastButton.addEventListener("click", function () {
+      preferences.highContrast = !preferences.highContrast;
+      applyDisplayPreferences(dom, preferences);
+      saveDisplayPreferences(preferences);
+      setDisplayStatus(dom, preferences.highContrast ? "High contrast enabled." : "High contrast disabled.");
+    });
+  }
+
   function initialise() {
     var dom = getDom();
     renderRules(dom);
     updateStats(dom);
+    initialiseDisplayControls(dom);
 
     dom.analyseButton.addEventListener("click", function () {
       var text = dom.input.value.trim();
