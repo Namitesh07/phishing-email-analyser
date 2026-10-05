@@ -2,35 +2,55 @@
 
 [Open the live demo](https://namitesh07.github.io/phishing-email-analyser/)
 
-A privacy-first, educational phishing-email triage tool. Paste the text of a suspicious email and the analyser highlights visible warning signs, explains their fixed point values, and suggests safe next steps.
+A privacy-first, educational phishing-email triage tool. It records visible warning signs, explains the fixed points behind its risk score, and helps users decide what to verify independently.
 
-> This is an educational triage tool, not a verdict that an email is safe or malicious.
+> This tool is an educational aid, not a verdict that an email is safe or malicious.
 
 ## Why I built it
 
-Phishing detection should be understandable. Instead of producing a mysterious score, this project shows the evidence behind every result and keeps private email content on the visitor's own device.
+Phishing analysis should be understandable and privacy-conscious. Rather than sending a message to an opaque service, this project keeps analysis in the browser and shows the evidence behind every result.
 
 ## Features
 
-- Gives an explainable phishing-risk score from 0–100.
-- Classifies messages as Low Risk, Suspicious, or High Risk.
-- Explains each detected indicator and its fixed point value.
-- Checks for common social-engineering techniques, including urgency, account threats, credential requests, payment requests, suspicious links, impersonation language, and risky attachments.
-- Reads pasted email headers when available, including From/Reply-To differences, recognised brand-style sender names using unexpected From domains, and SPF, DKIM, and DMARC failures.
-- Shows extracted URLs as non-clickable, plain-text evidence with the configured technical warning signs.
-- Summarises pasted sender and authentication headers in a dedicated Header checks panel.
-- Includes six fictional, safe practice emails for learning.
-- Provides practical recommendations without opening links or attachments.
-- Copies or downloads a local assessment report without including the pasted email body.
+- **Explainable risk score** from 0–100, classified as Low Risk, Suspicious, or High Risk.
+- **Fixed, visible rules** for urgency, threats, credential requests, payment scams, business-email fraud, suspicious links, impersonation language, and risky attachment names.
+- **Rich-email paste capture:** when a browser provides copied HTML, the analyser extracts link destinations from it as inert data. It never renders the HTML or opens a link.
+- **Raw email / HTML source mode:** lets users paste a safe “view original” or “show source” copy when normal paste does not retain button destinations.
+- **Assessment coverage:** clearly reports whether message text, rich/source data, link destinations, and recognised headers were available. A plain-text-only result is labelled **Limited evidence** so a low score is not mistaken for proof of safety.
+- **Header checks** for From/Reply-To domain mismatches, configured recognised-brand sender mismatches, and SPF, DKIM, and DMARC results when pasted headers contain them.
+- **Non-clickable URL evidence** with explainable indicators such as raw IP addresses, shorteners, plain HTTP, unusual ports, `@` tricks, punycode, and lookalike patterns.
+- **Why this score?** category breakdown with accessible progress bars.
+- **Local assessment reports** that exclude the pasted email body and redact URL query parameters and fragments.
+- **Accessibility controls** for larger text and high contrast, saved only in the visitor’s browser.
+- **Six fictional practice cases** using non-working `.example` domains or reserved test IP addresses.
 
 ## Privacy by design
 
-All analysis happens locally in the browser using plain JavaScript.
+All analysis takes place in the visitor’s browser.
 
-- No email content is uploaded.
-- No database, accounts, tracking, telemetry, AI service, or external API is used.
-- The site can be hosted as a completely static website.
-- Downloaded reports are generated locally, omit the pasted message body, and redact URL query parameters and fragments.
+- No email content is uploaded or sent to a server.
+- No backend, database, user accounts, analytics, telemetry, AI provider, external API, or tracking is used.
+- Rich HTML and raw source are treated as text for inspection only; they are never rendered, executed, or used to load remote images.
+- The app never visits extracted links or opens attachments.
+- Display preferences are the only values saved locally in the browser. Pasted email content is not saved.
+
+## Understanding coverage
+
+The score only reflects evidence that was actually available to inspect.
+
+| Coverage state | Meaning |
+| --- | --- |
+| **Limited evidence** | Only visible text, or otherwise incomplete evidence, was available. A low score does not confirm safety. |
+| **Partial evidence** | Some link or header information was available, but important context is still missing. |
+| **Expanded evidence** | Headers, rich-email data, or raw source added more evidence for local inspection. Attachments and images remain uninspected by design. |
+
+For important messages, verify independently through the organisation’s official website, app, or a contact method you already trust.
+
+## What the analyser does not do
+
+- It does not prove an email is safe or malicious.
+- It does not inspect attachment contents, images, external reputation data, or a sender’s mailbox.
+- It does not replace an organisation’s security process or an email provider’s phishing-report option.
 
 ## Technology
 
@@ -38,24 +58,18 @@ All analysis happens locally in the browser using plain JavaScript.
 - CSS
 - Vanilla JavaScript
 
-No framework, backend, package installation, or API key is required.
+No framework, dependency, backend, package installation, or API key is required. The project can be hosted as a static site, including GitHub Pages.
 
-## Running it locally
+## Run locally
 
 1. Download or clone this repository.
-2. Open `index.html` in a modern web browser.
-3. Paste one of the fictional examples or a suspicious email *without clicking its links or opening attachments*.
-
-## What I learned
-
-- How phishing and social-engineering indicators can be expressed as transparent rules.
-- Why SPF, DKIM, DMARC, and sender/header mismatches are useful clues rather than definitive proof.
-- How to design an educational cybersecurity tool that protects privacy by default.
-- How to build and deploy a responsive static web application with no backend.
+2. Open `index.html` in a modern browser.
+3. Paste a fictional practice case or a suspicious email **without clicking its links or opening attachments**.
+4. Use **Raw email / HTML source** only with a safely copied original/source view from your email provider.
 
 ## Safety note
 
-Never use this tool to test a suspicious link or attachment. Verify important messages through an organisation's official website, application, or a contact method you already trust.
+Never use this project to test a suspicious link or attachment. Do not reply with passwords, recovery codes, or MFA/OTP codes. Preserve the original message and report it through your email provider or organisation when appropriate.
 
 ## Usage
 
