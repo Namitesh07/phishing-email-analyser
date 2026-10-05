@@ -163,6 +163,9 @@
     RULE_BY_ID[rule.id] = rule;
   });
   var latestResult = null;
+  var activeInputMode = "paste";
+  var capturedRichHtml = "";
+  var richPastePending = false;
   var DISPLAY_PREFERENCE_KEY = "phishing-email-analyser-display-preferences-v1";
 
   var EXAMPLES = {
@@ -286,8 +289,16 @@
   function getDom() {
     return {
       input: document.getElementById("emailInput"),
-      textareaShell: document.querySelector(".textarea-shell"),
+      textareaShell: document.querySelector("#pastePanel .textarea-shell"),
       stats: document.getElementById("messageStats"),
+      pasteModeButton: document.getElementById("pasteModeButton"),
+      sourceModeButton: document.getElementById("sourceModeButton"),
+      pastePanel: document.getElementById("pastePanel"),
+      sourcePanel: document.getElementById("sourcePanel"),
+      sourceInput: document.getElementById("sourceInput"),
+      sourceTextareaShell: document.querySelector(".source-textarea-shell"),
+      sourceStats: document.getElementById("sourceStats"),
+      richPasteStatus: document.getElementById("richPasteStatus"),
       analyseButton: document.getElementById("analyseButton"),
       clearButton: document.getElementById("clearButton"),
       status: document.getElementById("analysisStatus"),
@@ -299,6 +310,9 @@
       riskPill: document.getElementById("riskPill"),
       riskTitle: document.getElementById("riskTitle"),
       riskDescription: document.getElementById("riskDescription"),
+      coverageBadge: document.getElementById("coverageBadge"),
+      coverageSummary: document.getElementById("coverageSummary"),
+      coverageList: document.getElementById("coverageList"),
       resultCount: document.getElementById("resultCount"),
       scoreFormula: document.getElementById("scoreFormula"),
       rawScoreBadge: document.getElementById("rawScoreBadge"),
@@ -463,6 +477,28 @@
       .replace(/&quot;/gi, '"')
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function inertHtmlText(value) {
+    return stripMarkup(String(value || "")
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " "));
+  }
+
+  function hasHtmlMarkup(value) {
+    return /<\s*\/?(?:html|body|table|tr|td|div|p|span|a|img|br|h[1-6])\b/i.test(String(value || ""));
+  }
+
+  function normaliseEvidence(input) {
+    if (typeof input === "string") {
+      return { text: input, html: "", source: "text" };
+    }
+    input = input || {};
+    return {
+      text: String(input.text || ""),
+      html: String(input.html || ""),
+      source: input.source === "raw-source" ? "raw-source" : "paste"
+    };
   }
 
   function toUrl(value) {
@@ -777,6 +813,30 @@
     };
   }
 
+  function buildCoverage(evidence, split, links) {
+    var richHtml = hasHtmlMarkup(evidence.html);
+    var rawSource = evidence.source === "raw-source";
+    var textAvailable = Boolean(inertHtmlText(split.body));
+    var headersAvailable = Boolean(split.headerText);
+    var level = "limited";
+
+    if (headersAvailable || richHtml || rawSource) {
+      level = "expanded";
+    } else if (links.length) {
+      level = "partial";
+    }
+
+    return {
+      level: level,
+      textAvailable: textAvailable,
+      richHtml: richHtml,
+      rawSource: rawSource,
+      linksFound: links.length,
+      headersAvailable: headersAvailable,
+      attachmentsInspected: false
+    };
+  }
+
   function classify(score) {
     if (score >= 60) {
       return {
@@ -803,11 +863,13 @@
   }
 
   function analyseEmail(input) {
-    var split = splitEmail(input);
+    var evidence = normaliseEvidence(input);
+    var split = splitEmail(evidence.text);
     var headers = parseHeaders(split.headerText);
-    var links = extractLinks(split.all);
+    var textForRules = split.all + (evidence.html ? "\n" + inertHtmlText(evidence.html) : "");
+    var links = extractLinks(split.all + (evidence.html ? "\n" + evidence.html : ""));
     var findings = [];
-    detectTextWarnings(split.all, findings);
+    detectTextWarnings(textForRules, findings);
     detectLinkWarnings(links, findings);
     detectHeaderWarnings(headers, split.headerText, findings);
     findings.sort(function (first, second) {
@@ -825,7 +887,8 @@
       classification: classify(score),
       headersPresent: Boolean(split.headerText),
       links: links,
-      headerSummary: buildHeaderSummary(headers, split.headerText)
+      headerSummary: buildHeaderSummary(headers, split.headerText),
+      coverage: buildCoverage(evidence, split, links)
     };
   }
 
@@ -845,6 +908,10 @@
       add("Pause before responding or following a link. Verify the message independently first.");
     } else {
       add("No major configured warning signs were found. Still check whether the message is expected before acting.");
+    }
+
+    if (result.coverage && result.coverage.level === "limited") {
+      add("This was a text-only assessment with limited evidence. A low score cannot confirm safety; if possible, inspect the original message headers or safe raw source.");
     }
 
     if (ids.some(function (id) { return ["suspiciousUrl", "shortenedUrl", "rawIpUrl", "misleadingLink"].indexOf(id) >= 0; })) {
@@ -960,12 +1027,69 @@
     });
   }
 
+  function coverageLabel(coverage) {
+    if (coverage.level === "expanded") {
+      return "Expanded evidence";
+    }
+    if (coverage.level === "partial") {
+      return "Partial evidence";
+    }
+    return "Limited evidence";
+  }
+
+  function coverageSummary(coverage) {
+    if (coverage.rawSource) {
+      return "Raw source was supplied and analysed locally as inert text. It was never rendered, opened, or sent anywhere.";
+    }
+    if (coverage.richHtml && coverage.headersAvailable) {
+      return "Visible text, rich-email link data, and recognised headers were available for this local assessment.";
+    }
+    if (coverage.richHtml) {
+      return "Visible text and rich-email data were available. The HTML was inspected as inert text and was never rendered or opened.";
+    }
+    if (coverage.headersAvailable) {
+      return "Visible text and recognised headers were available. Link destinations are available only when present in the pasted text.";
+    }
+    if (coverage.linksFound) {
+      return "Visible text and link destinations found in that text were available. Full headers and rich-email button destinations were not captured.";
+    }
+    return "Only visible text was available. No link destinations or recognised headers were captured, so a low score cannot confirm safety.";
+  }
+
+  function addCoverageRow(container, label, value, tone) {
+    var item = document.createElement("li");
+    var name = document.createElement("span");
+    var status = document.createElement("strong");
+    name.textContent = label;
+    status.className = "coverage-status coverage-" + tone;
+    status.textContent = value;
+    item.appendChild(name);
+    item.appendChild(status);
+    container.appendChild(item);
+  }
+
+  function renderCoverage(dom, result) {
+    var coverage = result.coverage;
+    clearChildren(dom.coverageList);
+    dom.coverageBadge.className = "coverage-badge coverage-" + coverage.level;
+    dom.coverageBadge.textContent = coverageLabel(coverage);
+    dom.coverageSummary.textContent = coverageSummary(coverage);
+
+    addCoverageRow(dom.coverageList, "Visible message text", coverage.textAvailable ? "Captured" : "Not available", coverage.textAvailable ? "available" : "missing");
+    addCoverageRow(dom.coverageList, "Rich email or raw source", coverage.rawSource ? "Raw source pasted" : coverage.richHtml ? "Captured from paste" : "Not captured", coverage.rawSource || coverage.richHtml ? "available" : "missing");
+    addCoverageRow(dom.coverageList, "Link destinations", coverage.linksFound ? coverage.linksFound + (coverage.linksFound === 1 ? " found" : " found") : "Not captured", coverage.linksFound ? "available" : "missing");
+    addCoverageRow(dom.coverageList, "Recognised email headers", coverage.headersAvailable ? "Included" : "Not included", coverage.headersAvailable ? "available" : "missing");
+    addCoverageRow(dom.coverageList, "Attachment contents", "Not inspected", "neutral");
+  }
+
   function renderFindings(dom, result) {
     clearChildren(dom.findings);
     if (!result.findings.length) {
       var noFindings = document.createElement("div");
       noFindings.className = "no-findings";
-      noFindings.textContent = "No configured warning signs were detected in this text. That is useful, but it is not a guarantee that the email is genuine or safe.";
+      noFindings.textContent = result.coverage && result.coverage.level === "limited"
+        ? "No configured warning signs were detected in the visible text. No link destinations or recognised headers were available, so this is not a safety result."
+        : "No configured warning signs were detected in the available evidence. That is useful, but it is not a guarantee that the email is genuine or safe.";
       dom.findings.appendChild(noFindings);
       return;
     }
@@ -1146,6 +1270,14 @@
       "Detected signals: " + result.findings.length,
       "Raw rule points: " + result.rawScore,
       "",
+      "ASSESSMENT COVERAGE",
+      "- Overall: " + coverageLabel(result.coverage),
+      "- Visible message text: " + (result.coverage.textAvailable ? "captured" : "not available"),
+      "- Rich email or raw source: " + (result.coverage.rawSource ? "raw source pasted" : result.coverage.richHtml ? "captured from paste" : "not captured"),
+      "- Link destinations: " + (result.coverage.linksFound ? result.coverage.linksFound + " found" : "not captured"),
+      "- Recognised email headers: " + (result.coverage.headersAvailable ? "included" : "not included"),
+      "- Attachment contents: not inspected",
+      "",
       "RECORDED INDICATORS"
     ];
 
@@ -1238,7 +1370,9 @@
     dom.scoreValue.textContent = String(result.score);
     dom.riskPill.textContent = risk.label;
     dom.riskTitle.textContent = risk.title;
-    dom.riskDescription.textContent = risk.description;
+    dom.riskDescription.textContent = result.coverage && result.coverage.level === "limited"
+      ? "Only visible text was assessed. This low score is not proof of safety because link destinations and email headers were not available."
+      : risk.description;
     dom.resultCount.textContent = result.findings.length + (result.findings.length === 1 ? " signal" : " signals");
     dom.rawScoreBadge.textContent = result.rawScore + " raw point" + (result.rawScore === 1 ? "" : "s");
     dom.scoreRange.textContent = risk.key === "high" ? "High: 60–100" : risk.key === "suspicious" ? "Suspicious: 20–59" : "Low: 0–19";
@@ -1246,6 +1380,7 @@
       ? "The detected rules add to " + result.rawScore + " points. Scores are capped at 100 so the result remains easy to compare."
       : "The detected rules add to " + result.rawScore + " points. Low: 0–19 · Suspicious: 20–59 · High: 60–100.";
     renderScoreBreakdown(dom, result);
+    renderCoverage(dom, result);
     renderFindings(dom, result);
     renderRecommendations(dom, result);
     renderLinkEvidence(dom, result);
@@ -1253,10 +1388,57 @@
     dom.reportStatus.textContent = "";
   }
 
+  function statsLabel(value) {
+    var length = value.length;
+    var lines = value ? value.split(/\r\n|\r|\n/).length : 0;
+    return length.toLocaleString() + " character" + (length === 1 ? "" : "s") + " · " + lines + " line" + (lines === 1 ? "" : "s");
+  }
+
   function updateStats(dom) {
-    var length = dom.input.value.length;
-    var lines = dom.input.value ? dom.input.value.split(/\r\n|\r|\n/).length : 0;
-    dom.stats.textContent = length.toLocaleString() + " character" + (length === 1 ? "" : "s") + " · " + lines + " line" + (lines === 1 ? "" : "s");
+    dom.stats.textContent = statsLabel(dom.input.value);
+  }
+
+  function updateSourceStats(dom) {
+    dom.sourceStats.textContent = statsLabel(dom.sourceInput.value);
+  }
+
+  function updateRichPasteStatus(dom) {
+    if (!capturedRichHtml) {
+      dom.richPasteStatus.textContent = "Text-only paste is ready. If copied rich-email data is available, link destinations will be captured locally.";
+      return;
+    }
+    var linkCount = extractLinks(capturedRichHtml).length;
+    dom.richPasteStatus.textContent = "Rich email data captured locally: " + linkCount + (linkCount === 1 ? " link destination" : " link destinations") + " found. It will be analysed as inert source.";
+  }
+
+  function clearRichPasteCapture(dom) {
+    capturedRichHtml = "";
+    richPastePending = false;
+    updateRichPasteStatus(dom);
+  }
+
+  function setInputMode(dom, mode) {
+    activeInputMode = mode === "source" ? "source" : "paste";
+    var sourceActive = activeInputMode === "source";
+    dom.pasteModeButton.setAttribute("aria-pressed", String(!sourceActive));
+    dom.sourceModeButton.setAttribute("aria-pressed", String(sourceActive));
+    dom.pastePanel.hidden = sourceActive;
+    dom.sourcePanel.hidden = !sourceActive;
+  }
+
+  function currentEvidence(dom) {
+    if (activeInputMode === "source") {
+      return {
+        text: dom.sourceInput.value.trim(),
+        html: dom.sourceInput.value.trim(),
+        source: "raw-source"
+      };
+    }
+    return {
+      text: dom.input.value.trim(),
+      html: capturedRichHtml,
+      source: "paste"
+    };
   }
 
   function readDisplayPreferences() {
@@ -1314,33 +1496,49 @@
     var dom = getDom();
     renderRules(dom);
     updateStats(dom);
+    updateSourceStats(dom);
+    updateRichPasteStatus(dom);
+    setInputMode(dom, "paste");
     initialiseDisplayControls(dom);
 
     dom.analyseButton.addEventListener("click", function () {
-      var text = dom.input.value.trim();
-      if (!text) {
-        dom.textareaShell.classList.add("input-error");
-        dom.status.textContent = "Paste an email first, then select Analyse email.";
-        dom.input.focus();
+      var evidence = currentEvidence(dom);
+      var currentShell = activeInputMode === "source" ? dom.sourceTextareaShell : dom.textareaShell;
+      var currentInput = activeInputMode === "source" ? dom.sourceInput : dom.input;
+      if (!evidence.text) {
+        currentShell.classList.add("input-error");
+        dom.status.textContent = activeInputMode === "source"
+          ? "Paste raw email or HTML source first, then select Analyse email."
+          : "Paste an email first, then select Analyse email.";
+        currentInput.focus();
         return;
       }
-      dom.textareaShell.classList.remove("input-error");
-      var result = analyseEmail(text);
+      currentShell.classList.remove("input-error");
+      var result = analyseEmail(evidence);
       renderResult(dom, result);
       dom.status.textContent = "Analysis complete: " + result.score + " out of 100 — " + result.classification.label + ".";
     });
 
     dom.clearButton.addEventListener("click", function () {
       dom.input.value = "";
+      dom.sourceInput.value = "";
       dom.textareaShell.classList.remove("input-error");
+      dom.sourceTextareaShell.classList.remove("input-error");
+      clearRichPasteCapture(dom);
       resetRenderedResult(dom);
       updateStats(dom);
+      updateSourceStats(dom);
       dom.status.textContent = "Email content cleared from this page.";
-      dom.input.focus();
+      (activeInputMode === "source" ? dom.sourceInput : dom.input).focus();
     });
 
     dom.input.addEventListener("input", function () {
       dom.textareaShell.classList.remove("input-error");
+      if (richPastePending) {
+        richPastePending = false;
+      } else if (capturedRichHtml) {
+        clearRichPasteCapture(dom);
+      }
       updateStats(dom);
       if (!dom.results.hidden) {
         resetRenderedResult(dom);
@@ -1348,17 +1546,47 @@
       }
     });
 
-    dom.input.addEventListener("keydown", function (event) {
+    dom.input.addEventListener("paste", function (event) {
+      var clipboard = event.clipboardData;
+      capturedRichHtml = clipboard ? String(clipboard.getData("text/html") || "") : "";
+      richPastePending = true;
+      updateRichPasteStatus(dom);
+    });
+
+    dom.sourceInput.addEventListener("input", function () {
+      dom.sourceTextareaShell.classList.remove("input-error");
+      updateSourceStats(dom);
+      if (!dom.results.hidden) {
+        resetRenderedResult(dom);
+        dom.status.textContent = "Email source changed. Inspect evidence again to update the assessment.";
+      }
+    });
+
+    dom.pasteModeButton.addEventListener("click", function () {
+      setInputMode(dom, "paste");
+      dom.input.focus();
+    });
+
+    dom.sourceModeButton.addEventListener("click", function () {
+      setInputMode(dom, "source");
+      dom.sourceInput.focus();
+    });
+
+    function analyseOnShortcut(event) {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
         dom.analyseButton.click();
       }
-    });
+    }
+    dom.input.addEventListener("keydown", analyseOnShortcut);
+    dom.sourceInput.addEventListener("keydown", analyseOnShortcut);
 
     Array.prototype.forEach.call(document.querySelectorAll("[data-example]"), function (button) {
       button.addEventListener("click", function () {
         var key = button.getAttribute("data-example");
+        setInputMode(dom, "paste");
         dom.input.value = EXAMPLES[key];
+        clearRichPasteCapture(dom);
         resetRenderedResult(dom);
         updateStats(dom);
         dom.input.focus();
