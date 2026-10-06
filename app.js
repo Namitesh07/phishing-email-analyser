@@ -80,6 +80,20 @@
       explanation: "The visible URL-like text does not match the actual destination in pasted HTML or Markdown."
     },
     {
+      id: "brandDomainMimic",
+      points: 18,
+      category: "Link",
+      label: "Brand name embedded in an unrelated URL domain",
+      explanation: "The destination uses a configured brand name but is not an official domain or subdomain for that brand."
+    },
+    {
+      id: "hiddenCharacters",
+      points: 14,
+      category: "Obfuscation",
+      label: "Hidden or direction-changing characters",
+      explanation: "The message contains invisible or direction-changing characters that can disguise words, addresses, or filenames."
+    },
+    {
       id: "impersonation",
       points: 8,
       category: "Impersonation",
@@ -163,6 +177,7 @@
     RULE_BY_ID[rule.id] = rule;
   });
   var latestResult = null;
+  var activeReportMode = "summary";
   var activeInputMode = "paste";
   var capturedRichHtml = "";
   var richPastePending = false;
@@ -326,6 +341,9 @@
       headerEvidenceState: document.getElementById("headerEvidenceState"),
       copyReportButton: document.getElementById("copyReportButton"),
       downloadReportButton: document.getElementById("downloadReportButton"),
+      summaryReportModeButton: document.getElementById("summaryReportModeButton"),
+      fullReportModeButton: document.getElementById("fullReportModeButton"),
+      reportModeHint: document.getElementById("reportModeHint"),
       reportStatus: document.getElementById("reportStatus"),
       rulesList: document.getElementById("rulesList"),
       largeTextButton: document.getElementById("largeTextButton"),
@@ -593,9 +611,29 @@
     });
   }
 
+  function recognisedBrandInUnexpectedDomain(host) {
+    var domain = cleanHost(host);
+    return RECOGNISED_SENDER_BRANDS.find(function (brand) {
+      return !isConfiguredBrandDomain(domain, brand) && brand.pattern.test(domain);
+    }) || null;
+  }
+
+  function configuredBrandForDomain(host) {
+    var domain = cleanHost(host);
+    return RECOGNISED_SENDER_BRANDS.find(function (brand) {
+      return isConfiguredBrandDomain(domain, brand);
+    }) || null;
+  }
+
+  function containsHiddenCharacters(value) {
+    return /[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]|&(?:#(?:820[3-7]|823[4-8]|8288|8294|8295|65279)|#x(?:200[b-f]|202[a-e]|2060|206[6-9]|feff)|ZeroWidthSpace|lrm|rlm);/i.test(String(value || ""));
+  }
+
   function inspectLink(link) {
     var suspiciousReasons = [];
     var rawIp = isIpv4(link.host) || (link.host.indexOf(":") >= 0 && /^[0-9a-f:]+$/i.test(link.host));
+    var brandMimic = recognisedBrandInUnexpectedDomain(link.host);
+    var officialBrand = configuredBrandForDomain(link.host);
 
     if (link.protocol === "http:") {
       suspiciousReasons.push("uses plain HTTP");
@@ -609,7 +647,9 @@
     if (link.host.indexOf("xn--") === 0 || link.host.indexOf(".xn--") >= 0) {
       suspiciousReasons.push("uses a punycode hostname");
     }
-    if (hasLookalike(link.host)) {
+    if (brandMimic) {
+      suspiciousReasons.push("uses " + brandMimic.label + " in an unrelated domain");
+    } else if (!officialBrand && hasLookalike(link.host)) {
       suspiciousReasons.push("looks similar to a well-known brand name");
     }
 
@@ -618,6 +658,7 @@
       suspiciousReasons: suspiciousReasons,
       shortened: SHORTENER_HOSTS.indexOf(link.host) >= 0,
       rawIp: rawIp,
+      brandMimic: brandMimic,
       misleading: Boolean(shown && !domainsRelated(shown, link.host)),
       shownHost: shown
     };
@@ -628,6 +669,7 @@
     var shortenedHosts = [];
     var ipHosts = [];
     var mismatches = [];
+    var brandMimicHosts = [];
 
     links.forEach(function (link) {
       var inspection = inspectLink(link);
@@ -643,6 +685,9 @@
       if (inspection.misleading) {
         mismatches.push("shown as " + inspection.shownHost + " but points to " + link.host);
       }
+      if (inspection.brandMimic) {
+        brandMimicHosts.push(inspection.brandMimic.label + " in " + link.host);
+      }
     });
 
     if (suspiciousHosts.length) {
@@ -657,9 +702,15 @@
     if (mismatches.length) {
       addFinding(findings, "misleadingLink", "Detected: " + quotedTerms(mismatches, 2) + ".");
     }
+    if (brandMimicHosts.length) {
+      addFinding(findings, "brandDomainMimic", "Detected: " + quotedTerms(brandMimicHosts, 2) + ".");
+    }
   }
 
   function detectTextWarnings(text, findings) {
+    if (containsHiddenCharacters(text)) {
+      addFinding(findings, "hiddenCharacters", "Detected hidden, direction-changing, or encoded zero-width characters in the available evidence.");
+    }
     var lower = text.toLowerCase();
     var urgency = uniqueMatches(text, [
       /\b(?:urgent|urgently|immediate(?:ly)?|act now|action required|final (?:notice|warning)|do not delay|without delay)\b/gi,
@@ -914,8 +965,11 @@
       add("This was a text-only assessment with limited evidence. A low score cannot confirm safety; if possible, inspect the original message headers or safe raw source.");
     }
 
-    if (ids.some(function (id) { return ["suspiciousUrl", "shortenedUrl", "rawIpUrl", "misleadingLink"].indexOf(id) >= 0; })) {
+    if (ids.some(function (id) { return ["suspiciousUrl", "shortenedUrl", "rawIpUrl", "misleadingLink", "brandDomainMimic"].indexOf(id) >= 0; })) {
       add("Do not use the email’s link. Open the organisation’s official website or app yourself instead.");
+    }
+    if (ids.indexOf("hiddenCharacters") >= 0) {
+      add("Treat disguised text or addresses with caution. Verify the message outside the email using a trusted contact method.");
     }
     if (ids.some(function (id) { return ["unusualAttachment", "executableAttachment", "macroRequest"].indexOf(id) >= 0; })) {
       add("Do not open the attachment or enable macros/content. Ask the sender through a known contact method if it is expected.");
@@ -1261,7 +1315,47 @@
     });
   }
 
-  function reportText(result) {
+  function coverageReportLines(result) {
+    return [
+      "ASSESSMENT COVERAGE",
+      "- Overall: " + coverageLabel(result.coverage),
+      "- Visible message text: " + (result.coverage.textAvailable ? "captured" : "not available"),
+      "- Rich email or raw source: " + (result.coverage.rawSource ? "raw source pasted" : result.coverage.richHtml ? "captured from paste" : "not captured"),
+      "- Link destinations: " + (result.coverage.linksFound ? result.coverage.linksFound + " found" : "not captured"),
+      "- Recognised email headers: " + (result.coverage.headersAvailable ? "included" : "not included"),
+      "- Attachment contents: not inspected"
+    ];
+  }
+
+  function shareableReportText(result) {
+    var lines = [
+      "PHISHING EMAIL ANALYSER — SHAREABLE SUMMARY",
+      "Generated locally in this browser. The pasted email body, link destinations, sender domains, and header values are not included.",
+      "",
+      "Risk score: " + result.score + "/100 (" + result.classification.label + ")",
+      "Detected signals: " + result.findings.length,
+      "Raw rule points: " + result.rawScore,
+      ""
+    ].concat(coverageReportLines(result));
+
+    lines.push("", "KEY SIGNALS");
+    if (result.findings.length) {
+      result.findings.forEach(function (finding) {
+        lines.push("- +" + finding.rule.points + " " + finding.rule.label);
+      });
+    } else {
+      lines.push("- No configured warning signs were detected in the available evidence. This is not proof that the email is genuine.");
+    }
+
+    lines.push("", "RECOMMENDED PROTOCOL");
+    recommendationItems(result).forEach(function (item) {
+      lines.push("- " + item);
+    });
+    lines.push("", "This educational triage result is not a definitive determination that an email is safe or malicious.");
+    return lines.join("\n");
+  }
+
+  function fullEvidenceReportText(result) {
     var lines = [
       "PHISHING EMAIL ANALYSER — LOCAL ASSESSMENT REPORT",
       "Generated locally in this browser. The pasted email body is not included; URL query parameters and fragments are redacted.",
@@ -1269,17 +1363,8 @@
       "Risk score: " + result.score + "/100 (" + result.classification.label + ")",
       "Detected signals: " + result.findings.length,
       "Raw rule points: " + result.rawScore,
-      "",
-      "ASSESSMENT COVERAGE",
-      "- Overall: " + coverageLabel(result.coverage),
-      "- Visible message text: " + (result.coverage.textAvailable ? "captured" : "not available"),
-      "- Rich email or raw source: " + (result.coverage.rawSource ? "raw source pasted" : result.coverage.richHtml ? "captured from paste" : "not captured"),
-      "- Link destinations: " + (result.coverage.linksFound ? result.coverage.linksFound + " found" : "not captured"),
-      "- Recognised email headers: " + (result.coverage.headersAvailable ? "included" : "not included"),
-      "- Attachment contents: not inspected",
-      "",
-      "RECORDED INDICATORS"
-    ];
+      ""
+    ].concat(coverageReportLines(result), ["", "RECORDED INDICATORS"]);
 
     if (result.findings.length) {
       result.findings.forEach(function (finding) {
@@ -1317,6 +1402,20 @@
     return lines.join("\n");
   }
 
+  function reportText(result, mode) {
+    return mode === "full" ? fullEvidenceReportText(result) : shareableReportText(result);
+  }
+
+  function setReportMode(dom, mode) {
+    activeReportMode = mode === "full" ? "full" : "summary";
+    var isFull = activeReportMode === "full";
+    dom.summaryReportModeButton.setAttribute("aria-pressed", String(!isFull));
+    dom.fullReportModeButton.setAttribute("aria-pressed", String(isFull));
+    dom.reportModeHint.textContent = isFull
+      ? "Includes assessment coverage, detailed findings, redacted link evidence, header checks, and safe next steps."
+      : "Includes the risk result, assessment coverage, recorded signal names, and safe next steps. It leaves out link and header details.";
+  }
+
   function copyText(text) {
     if (navigator.clipboard && window.isSecureContext) {
       return navigator.clipboard.writeText(text);
@@ -1339,12 +1438,12 @@
     });
   }
 
-  function downloadReport(result) {
-    var blob = new Blob([reportText(result)], { type: "text/plain;charset=utf-8" });
+  function downloadReport(result, mode) {
+    var blob = new Blob([reportText(result, mode)], { type: "text/plain;charset=utf-8" });
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
     link.href = url;
-    link.download = "phishing-email-assessment-report.txt";
+    link.download = mode === "full" ? "phishing-email-full-evidence-report.txt" : "phishing-email-shareable-summary.txt";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1499,6 +1598,7 @@
     updateSourceStats(dom);
     updateRichPasteStatus(dom);
     setInputMode(dom, "paste");
+    setReportMode(dom, "summary");
     initialiseDisplayControls(dom);
 
     dom.analyseButton.addEventListener("click", function () {
@@ -1598,8 +1698,10 @@
       if (!latestResult) {
         return;
       }
-      copyText(reportText(latestResult)).then(function () {
-        dom.reportStatus.textContent = "Assessment report copied locally. The pasted email body and URL query details were not included.";
+      copyText(reportText(latestResult, activeReportMode)).then(function () {
+        dom.reportStatus.textContent = activeReportMode === "full"
+          ? "Full evidence report copied locally. The pasted email body and URL query details were not included."
+          : "Shareable summary copied locally. Link and header details were not included.";
       }).catch(function () {
         dom.reportStatus.textContent = "Copy was blocked by this browser. You can download the local .txt report instead.";
       });
@@ -1609,8 +1711,20 @@
       if (!latestResult) {
         return;
       }
-      downloadReport(latestResult);
-      dom.reportStatus.textContent = "Local .txt report downloaded. The pasted email body and URL query details were not included.";
+      downloadReport(latestResult, activeReportMode);
+      dom.reportStatus.textContent = activeReportMode === "full"
+        ? "Full evidence report downloaded locally. The pasted email body and URL query details were not included."
+        : "Shareable summary downloaded locally. Link and header details were not included.";
+    });
+
+    dom.summaryReportModeButton.addEventListener("click", function () {
+      setReportMode(dom, "summary");
+      dom.reportStatus.textContent = "Shareable summary selected.";
+    });
+
+    dom.fullReportModeButton.addEventListener("click", function () {
+      setReportMode(dom, "full");
+      dom.reportStatus.textContent = "Full evidence report selected.";
     });
   }
 
@@ -1618,7 +1732,8 @@
     window.phishingEmailAnalyser = {
       analyseEmail: analyseEmail,
       examples: EXAMPLES,
-      rules: RULES
+      rules: RULES,
+      reportText: reportText
     };
   }
 

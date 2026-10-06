@@ -18,9 +18,10 @@ Phishing analysis should be understandable and privacy-conscious. Rather than se
 - **Raw email / HTML source mode:** lets users paste a safe “view original” or “show source” copy when normal paste does not retain button destinations.
 - **Assessment coverage:** clearly reports whether message text, rich/source data, link destinations, and recognised headers were available. A plain-text-only result is labelled **Limited evidence** so a low score is not mistaken for proof of safety.
 - **Header checks** for From/Reply-To domain mismatches, configured recognised-brand sender mismatches, and SPF, DKIM, and DMARC results when pasted headers contain them.
-- **Non-clickable URL evidence** with explainable indicators such as raw IP addresses, shorteners, plain HTTP, unusual ports, `@` tricks, punycode, and lookalike patterns.
+- **Advanced link-deception checks** for raw IP addresses, shorteners, plain HTTP, unusual ports, `@` tricks, punycode, lookalike patterns, brand names embedded in unrelated domains, and visible-link/destination mismatches.
+- **Hidden-character detection** for zero-width and direction-changing characters that can disguise words, addresses, or filenames.
 - **Why this score?** category breakdown with accessible progress bars.
-- **Local assessment reports** that exclude the pasted email body and redact URL query parameters and fragments.
+- **Two local report modes:** a safer Shareable Summary without link or header details, and a Full Evidence Report with redacted URLs, header checks, and recorded evidence. Both include assessment coverage and exclude the pasted email body.
 - **Accessibility controls** for larger text and high contrast, saved only in the visitor’s browser.
 - **Six fictional practice cases** using non-working `.example` domains or reserved test IP addresses.
 

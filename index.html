@@ -350,8 +350,13 @@
                 <div>
                   <p class="section-kicker">Case handoff</p>
                   <h3 id="reportToolsTitle">Keep a local assessment report</h3>
-                <p>The report excludes the pasted email body and redacts URL query parameters and fragments. Copy or download it only if it is appropriate to share the recorded evidence.</p>
+                  <p>The report excludes the pasted email body and redacts URL query parameters and fragments. Choose the safest level of detail for the person receiving it.</p>
                 </div>
+                <div class="report-mode-picker" role="group" aria-label="Report detail level">
+                  <button id="summaryReportModeButton" class="report-mode-button" type="button" aria-pressed="true">Shareable summary</button>
+                  <button id="fullReportModeButton" class="report-mode-button" type="button" aria-pressed="false">Full evidence report</button>
+                </div>
+                <p id="reportModeHint" class="report-mode-hint">Includes the risk result, assessment coverage, recorded signal names, and safe next steps. It leaves out link and header details.</p>
                 <div class="report-actions">
                   <button id="copyReportButton" class="button button-secondary" type="button">Copy report</button>
                   <button id="downloadReportButton" class="button button-secondary" type="button">Download .txt</button>
@@ -373,6 +378,6 @@
       </footer>
     </div>
 
-    <script src="app.js?v=1.3.0" defer></script>
+    <script src="app.js?v=1.4.0" defer></script>
   </body>
 </html>
