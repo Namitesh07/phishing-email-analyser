@@ -559,6 +559,23 @@
     return decodeHtmlEntities(visibleHtmlSource(value).replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
   }
 
+  function decodeQuotedPrintable(value) {
+    var source = String(value || "").replace(/=\r?\n|=\r/g, "");
+    return source.replace(/(?:=[0-9a-f]{2})+/gi, function (encodedBytes) {
+      var bytes = encodedBytes.match(/[0-9a-f]{2}/gi).map(function (byte) {
+        return parseInt(byte, 16);
+      });
+      if (typeof TextDecoder === "function" && typeof Uint8Array === "function") {
+        try {
+          return new TextDecoder("utf-8").decode(new Uint8Array(bytes));
+        } catch (error) {
+          // Preserve the byte values if this browser cannot decode the sequence.
+        }
+      }
+      return bytes.map(function (byte) { return String.fromCharCode(byte); }).join("");
+    });
+  }
+
   function hasHtmlMarkup(value) {
     return /<\s*\/?(?:html|body|table|tr|td|div|p|span|a|img|br|h[1-6])\b/i.test(String(value || ""));
   }
@@ -996,11 +1013,13 @@
     var evidence = normaliseEvidence(input);
     var split = splitEmail(evidence.text);
     var headers = parseHeaders(split.headerText);
-    var messageBody = hasHtmlMarkup(split.body) ? inertHtmlText(split.body) : split.body;
+    var hasQuotedPrintable = /(?:^|\n)content-transfer-encoding\s*:\s*quoted-printable\b/i.test(split.headerText + "\n" + split.body);
+    var messageSource = hasQuotedPrintable ? decodeQuotedPrintable(split.body) : split.body;
+    var messageBody = hasHtmlMarkup(messageSource) ? inertHtmlText(messageSource) : messageSource;
     var subject = getHeader(headers, "subject");
     var richPasteText = evidence.source === "raw-source" ? "" : (evidence.html ? inertHtmlText(evidence.html) : "");
     var textForRules = [subject, messageBody, richPasteText].filter(Boolean).join("\n");
-    var linkSource = split.body + (evidence.source === "raw-source" || !evidence.html ? "" : "\n" + evidence.html);
+    var linkSource = messageSource + (evidence.source === "raw-source" || !evidence.html ? "" : "\n" + evidence.html);
     var links = extractLinks(linkSource);
     var findings = [];
     detectTextWarnings(textForRules, findings);

@@ -15,7 +15,7 @@ Phishing analysis should be understandable and privacy-conscious. Rather than se
 - **Explainable risk score** from 0–100, classified as Low Risk, Suspicious, or High Risk.
 - **Fixed, visible rules** for urgency, threats, credential requests, payment scams, business-email fraud, suspicious links, impersonation language, and risky attachment names.
 - **Rich-email paste capture:** when a browser provides copied HTML, the analyser extracts link destinations from it as inert data. It never renders the HTML or opens a link.
-- **Raw email source mode:** accepts copied message source, separates headers and message body, and reads visible HTML body text without scanning scripts, page metadata, or hidden sections as email evidence.
+- **Raw email source mode:** accepts copied message source, decodes quoted-printable body data before reading links and text, separates headers and message body, and skips scripts, page metadata, and hidden sections as email evidence.
 - **Input guardrails:** full webmail page source is rejected with Gmail-specific guidance instead of being scored, and inputs over 1,000,000 characters are stopped to avoid misleading results and slow analysis.
 - **Assessment coverage:** clearly reports whether message text, rich/source data, link destinations, and recognised headers were available. A plain-text-only result is labelled **Limited evidence** so a low score is not mistaken for proof of safety.
 - **Header checks** for From/Reply-To domain mismatches, configured recognised-brand sender mismatches, and SPF, DKIM, and DMARC results when pasted headers contain them.

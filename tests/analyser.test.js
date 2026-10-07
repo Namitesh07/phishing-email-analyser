@@ -40,6 +40,30 @@ test("legitimate Google message HTML ignores scripts, head metadata, and hidden 
   assert.equal(result.links[0].host, "myaccount.google.com");
 });
 
+test("quoted-printable Google links are decoded before link scoring", () => {
+  const rawMessage = [
+    "From: Google <no-reply@google.com>",
+    "To: user@gmail.com",
+    "Subject: Google account activity",
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: quoted-printable",
+    "",
+    "<a href=3D\"http://services.google.com=",
+    "/account?source=3Dsecurity\">Review account activity</a>"
+  ].join("\n");
+
+  const result = analyser.analyseEmail({ text: rawMessage, html: rawMessage, source: "raw-source" });
+  assert.equal(result.links.length, 1);
+  assert.equal(result.links[0].host, "services.google.com");
+  assert.equal(result.links[0].href, "http://services.google.com/account?source=security");
+  assert.equal(result.score, 12);
+  assert.equal(result.classification.key, "low");
+  assert.ok(result.findings.some((finding) => finding.id === "suspiciousUrl"));
+  assert.equal(result.findings.some((finding) => finding.id === "brandDomainMimic"), false);
+  assert.match(result.findings.find((finding) => finding.id === "suspiciousUrl").detail, /services\.google\.com \(uses plain HTTP\)/);
+});
+
 test("full webmail page source is rejected with safe Gmail instructions", () => {
   const pageSource = "<!doctype html><html><head><title>Inbox - Gmail</title><script>const shell='gmail menu toolbar';</script></head><body>Inbox</body></html>";
   const message = analyser.validateEvidence({ text: pageSource, html: pageSource, source: "raw-source" });
