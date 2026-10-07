@@ -92,7 +92,7 @@
 
               <div class="intake-mode" role="group" aria-label="Evidence input type">
                 <button id="pasteModeButton" class="intake-mode-button" type="button" aria-pressed="true">Paste email</button>
-                <button id="sourceModeButton" class="intake-mode-button" type="button" aria-pressed="false">Raw email / HTML source</button>
+                <button id="sourceModeButton" class="intake-mode-button" type="button" aria-pressed="false">Raw email source</button>
               </div>
 
               <div id="pastePanel">
@@ -108,9 +108,9 @@
               </div>
 
               <div id="sourcePanel" hidden>
-                <p id="sourceInputHelp" class="source-help">Paste raw email content or HTML source from a safe “view original” or “show source” option. It is treated as text only: this page never renders it, opens links, or fetches remote images.</p>
+                <p id="sourceInputHelp" class="source-help">Paste the email’s raw message source (maximum 1,000,000 characters), not your browser’s “View Page Source.” In Gmail, open the message, choose More (⋮) → Show original, and copy the message source. Full webmail page source is unsupported and will be stopped instead of scored. Analysis stays local; links are not opened and remote images are not fetched.</p>
                 <div class="textarea-shell source-textarea-shell">
-                  <label class="visually-hidden" for="sourceInput">Raw email or HTML source</label>
+                  <label class="visually-hidden" for="sourceInput">Raw email message source</label>
                   <textarea id="sourceInput" aria-describedby="sourceInputHelp sourceStats" placeholder="Paste raw headers and message source here..."></textarea>
                   <div class="textarea-footer">
                     <span id="sourceStats">0 characters · 0 lines</span>
@@ -174,7 +174,7 @@
                     <small>Expected study-group reminder</small>
                   </button>
                 </div>
-                <p class="example-note">All examples are fictional and use non-working <code>.example</code> domains or reserved test IP addresses.</p>
+                <p class="example-note">All examples are fictional and use non-working <code>.example</code> domains or reserved test IP addresses. Load a case with one click; this avoids copying blocked third-party training pages.</p>
               </div>
             </article>
 
@@ -378,6 +378,6 @@
       </footer>
     </div>
 
-    <script src="app.js?v=1.4.0" defer></script>
+    <script src="app.js?v=1.5.0" defer></script>
   </body>
 </html>
