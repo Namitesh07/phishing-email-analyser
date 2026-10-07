@@ -181,6 +181,7 @@
   var activeInputMode = "paste";
   var capturedRichHtml = "";
   var richPastePending = false;
+  var MAX_EVIDENCE_CHARACTERS = 1000000;
   var DISPLAY_PREFERENCE_KEY = "phishing-email-analyser-display-preferences-v1";
 
   var EXAMPLES = {
@@ -395,10 +396,13 @@
   }
 
   function splitEmail(input) {
-    var normalized = input.replace(/\r\n?/g, "\n");
+    var normalized = input.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
     var boundary = normalized.indexOf("\n\n");
     var possibleHeaders = boundary >= 0 ? normalized.slice(0, boundary) : "";
-    var hasHeaders = /^(from|to|subject|date|reply-to|return-path|authentication-results|received-spf)\s*:/im.test(possibleHeaders);
+    var firstLine = possibleHeaders.split("\n")[0] || "";
+    var startsLikeHeaders = /^(?:return-path|delivered-to|received|from|sender|to|cc|bcc|reply-to|subject|date|message-id|mime-version|content-type|authentication-results|received-spf)\s*:/i.test(firstLine);
+    var hasMessageHeader = /^(?:from|subject|message-id|mime-version|content-type)\s*:/im.test(possibleHeaders);
+    var hasHeaders = boundary >= 0 && startsLikeHeaders && hasMessageHeader;
     return {
       all: normalized,
       headerText: hasHeaders ? possibleHeaders : "",
@@ -497,10 +501,62 @@
       .trim();
   }
 
+  function decodeHtmlEntities(value) {
+    var namedEntities = {
+      amp: "&",
+      lt: "<",
+      gt: ">",
+      quot: "\"",
+      apos: "'",
+      nbsp: " ",
+      colon: ":",
+      sol: "/",
+      commat: "@",
+      lrm: "\u200E",
+      rlm: "\u200F",
+      zwj: "\u200D",
+      zwnj: "\u200C",
+      zerowidthspace: "\u200B"
+    };
+    return String(value || "").replace(/&(#(?:x[\da-f]{1,6}|\d{1,7})|[a-z][a-z\d]+);/gi, function (entity, code) {
+      if (code.charAt(0) === "#") {
+        var number = code.charAt(1).toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+        if (!Number.isFinite(number) || number <= 0 || number > 0x10FFFF) {
+          return entity;
+        }
+        try {
+          return String.fromCodePoint(number);
+        } catch (error) {
+          return entity;
+        }
+      }
+      return Object.prototype.hasOwnProperty.call(namedEntities, code.toLowerCase())
+        ? namedEntities[code.toLowerCase()]
+        : entity;
+    });
+  }
+
+  function stripHiddenHtmlRegions(value) {
+    return String(value || "").replace(
+      /<(div|span|td|tr|table|p|a|li|section|aside|label|button)\b(?=[^>]*(?:\shidden(?:\s|=|\/|$)|\saria-hidden\s*=\s*(?:"true"|'true'|true)|\sstyle\s*=\s*(?:"[^\"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^\"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*')))[^>]*>[\s\S]*?<\/\1\s*>/gi,
+      " "
+    );
+  }
+
+  function visibleHtmlSource(value) {
+    var html = String(value || "")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<(script|style|template|noscript|svg|head|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
+      .replace(/<(?:meta|link|base)\b[^>]*>/gi, " ");
+    var bodyMatch = html.match(/<body\b[^>]*>([\s\S]*?)<\/body\s*>/i);
+    if (bodyMatch) {
+      html = bodyMatch[1];
+    }
+    return stripHiddenHtmlRegions(html);
+  }
+
   function inertHtmlText(value) {
-    return stripMarkup(String(value || "")
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " "));
+    return decodeHtmlEntities(visibleHtmlSource(value).replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
   }
 
   function hasHtmlMarkup(value) {
@@ -549,6 +605,7 @@
   function extractLinks(text) {
     var results = [];
     var seen = {};
+    var searchableText = visibleHtmlSource(text);
 
     function add(rawUrl, linkText) {
       var parsed = toUrl(rawUrl);
@@ -580,19 +637,19 @@
 
     var anchorPattern = /<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi;
     var anchorMatch;
-    while ((anchorMatch = anchorPattern.exec(text)) !== null) {
+    while ((anchorMatch = anchorPattern.exec(searchableText)) !== null) {
       add(anchorMatch[2], stripMarkup(anchorMatch[3]));
     }
 
     var markdownPattern = /\[([^\]]{1,160})\]\((https?:\/\/[^)\s]+)\)/gi;
     var markdownMatch;
-    while ((markdownMatch = markdownPattern.exec(text)) !== null) {
+    while ((markdownMatch = markdownPattern.exec(searchableText)) !== null) {
       add(markdownMatch[2], markdownMatch[1]);
     }
 
     var plainPattern = /\b(?:https?:\/\/|www\.)[^\s<>"')\]]+/gi;
     var plainMatch;
-    while ((plainMatch = plainPattern.exec(text)) !== null) {
+    while ((plainMatch = plainPattern.exec(searchableText)) !== null) {
       add(plainMatch[0], "");
     }
 
@@ -867,7 +924,7 @@
   function buildCoverage(evidence, split, links) {
     var richHtml = hasHtmlMarkup(evidence.html);
     var rawSource = evidence.source === "raw-source";
-    var textAvailable = Boolean(inertHtmlText(split.body));
+    var textAvailable = Boolean(inertHtmlText(split.body) || inertHtmlText(evidence.html));
     var headersAvailable = Boolean(split.headerText);
     var level = "limited";
 
@@ -886,6 +943,28 @@
       headersAvailable: headersAvailable,
       attachmentsInspected: false
     };
+  }
+
+  function validateEvidence(input) {
+    var evidence = normaliseEvidence(input);
+    var inputLength = Math.max(evidence.text.length, evidence.html.length);
+    if (inputLength > MAX_EVIDENCE_CHARACTERS) {
+      return "This input is too large to analyse reliably (limit: 1,000,000 characters). Use the email’s original message source or paste only the message text.";
+    }
+
+    var sourceCandidates = [evidence.text, evidence.html];
+    var looksLikeFullWebmailPage = sourceCandidates.some(function (candidate) {
+      if (!candidate || splitEmail(candidate).headerText) {
+        return false;
+      }
+      var hasDocumentShell = /(?:<!doctype\s+html\b|<html\b)/i.test(candidate) && /<head\b/i.test(candidate);
+      var hasPageScripts = (candidate.match(/<script\b/gi) || []).length > 0;
+      return hasDocumentShell && hasPageScripts;
+    });
+    if (looksLikeFullWebmailPage) {
+      return "This looks like a full webmail page, not the email itself, so its interface could distort the score. In Gmail, open the message, choose More (⋮) → Show original, and copy the message source; or switch to Paste email and paste only the message text.";
+    }
+    return "";
   }
 
   function classify(score) {
@@ -917,8 +996,12 @@
     var evidence = normaliseEvidence(input);
     var split = splitEmail(evidence.text);
     var headers = parseHeaders(split.headerText);
-    var textForRules = split.all + (evidence.html ? "\n" + inertHtmlText(evidence.html) : "");
-    var links = extractLinks(split.all + (evidence.html ? "\n" + evidence.html : ""));
+    var messageBody = hasHtmlMarkup(split.body) ? inertHtmlText(split.body) : split.body;
+    var subject = getHeader(headers, "subject");
+    var richPasteText = evidence.source === "raw-source" ? "" : (evidence.html ? inertHtmlText(evidence.html) : "");
+    var textForRules = [subject, messageBody, richPasteText].filter(Boolean).join("\n");
+    var linkSource = split.body + (evidence.source === "raw-source" || !evidence.html ? "" : "\n" + evidence.html);
+    var links = extractLinks(linkSource);
     var findings = [];
     detectTextWarnings(textForRules, findings);
     detectLinkWarnings(links, findings);
@@ -1605,12 +1688,18 @@
       var evidence = currentEvidence(dom);
       var currentShell = activeInputMode === "source" ? dom.sourceTextareaShell : dom.textareaShell;
       var currentInput = activeInputMode === "source" ? dom.sourceInput : dom.input;
-      if (!evidence.text) {
+      if (!evidence.text && !evidence.html) {
         currentShell.classList.add("input-error");
         dom.status.textContent = activeInputMode === "source"
           ? "Paste raw email or HTML source first, then select Analyse email."
           : "Paste an email first, then select Analyse email.";
         currentInput.focus();
+        return;
+      }
+      var inputWarning = validateEvidence(evidence);
+      if (inputWarning) {
+        currentShell.classList.remove("input-error");
+        dom.status.textContent = inputWarning;
         return;
       }
       currentShell.classList.remove("input-error");
@@ -1731,6 +1820,7 @@
   if (typeof window !== "undefined") {
     window.phishingEmailAnalyser = {
       analyseEmail: analyseEmail,
+      validateEvidence: validateEvidence,
       examples: EXAMPLES,
       rules: RULES,
       reportText: reportText
