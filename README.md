@@ -1,87 +1,118 @@
+<div align="center">
+
 # Phishing Email Analyser
 
-[Open the live demo](https://namitesh07.github.io/phishing-email-analyser/)
+### Email security triage, with evidence you can inspect.
 
-A privacy-first, educational phishing-email triage tool. It records visible warning signs, explains the fixed points behind its risk score, and helps users decide what to verify independently.
+Review message clues, understand why rules raised them, and choose what to verify next — right in your browser.
 
-> This tool is an educational aid, not a verdict that an email is safe or malicious.
+[![Open the live demo](https://img.shields.io/badge/Live%20demo-Open%20analyser-1769aa?style=for-the-badge)](https://namitesh07.github.io/phishing-email-analyser/)
+![Browser-based](https://img.shields.io/badge/Analysis-Browser--based-168a72?style=for-the-badge)
+![No uploads](https://img.shields.io/badge/Email%20content-No%20uploads-5b6472?style=for-the-badge)
 
-## Why I built it
+**A privacy-first, educational triage tool — not an automated verdict on whether an email is safe.**
 
-Phishing analysis should be understandable and privacy-conscious. Rather than sending a message to an opaque service, this project keeps analysis in the browser and shows the evidence behind every result.
+[Try the demo](https://namitesh07.github.io/phishing-email-analyser/) · [How it works](#how-to-use-it) · [Privacy](#privacy-by-design) · [Limitations](#know-the-limits)
 
-## Features
+</div>
 
-- **Explainable risk score** from 0–100, classified as Low Risk, Suspicious, or High Risk.
-- **Fixed, visible rules** for urgency, threats, credential requests, payment scams, business-email fraud, suspicious links, impersonation language, and risky attachment names.
-- **Rich-email paste capture:** when a browser provides copied HTML, the analyser extracts link destinations from it as inert data. It never renders the HTML or opens a link.
-- **Raw email source mode:** accepts copied message source, decodes quoted-printable body data before reading links and text, separates headers and message body, and skips scripts, page metadata, and hidden sections as email evidence. Base64-encoded MIME body content is excluded from scoring and shown as an incomplete-coverage warning; paste the visible message text for a fuller assessment.
-- **Input guardrails:** full webmail page source is rejected with Gmail-specific guidance instead of being scored, and inputs over 1,000,000 characters are stopped to avoid misleading results and slow analysis.
-- **Assessment coverage:** clearly reports whether message text, rich/source data, link destinations, and recognised headers were available. A plain-text-only result is labelled **Limited evidence** so a low score is not mistaken for proof of safety.
-- **Header checks** for From/Reply-To domain mismatches, configured recognised-brand sender mismatches, and SPF, DKIM, and DMARC results when pasted headers contain them.
-- **Advanced link-deception checks** for raw IP addresses, shorteners, plain HTTP, unusual ports, `@` tricks, punycode, lookalike patterns, brand names embedded in unrelated domains, and visible-link/destination mismatches.
-- **Hidden-character detection** for zero-width and direction-changing characters that can disguise words, addresses, or filenames.
-- **Why this score?** category breakdown with accessible progress bars.
-- **Two local report modes:** a Shareable Summary without link or header details, and a Full Evidence Report with host-level link evidence and redaction. Both include assessment coverage and omit the full pasted body; the Full Evidence Report may include short matching text excerpts. URL paths, query parameters, and fragments are redacted.
-- **Accessibility controls** for larger text and high contrast, saved only in the visitor’s browser.
-- **Six fictional practice cases** using non-working `.example` domains or reserved test IP addresses.
+---
+
+## The idea
+
+Phishing messages can look convincing, and a single score cannot prove who sent an email. This project helps people **spot and understand warning signs** by applying visible, fixed rules to the evidence they provide.
+
+Analysis runs locally in the browser. The analyser does not upload the email, render pasted HTML, open links, or inspect attachments.
+
+## What it can inspect
+
+| Area | Checks and evidence |
+| --- | --- |
+| **Message content** | Urgency, threats, credential requests, payment requests, impersonation language, and risky attachment names |
+| **Links** | Actual destinations captured from rich email or source; lookalike and punycode patterns, misleading subdomains, raw IPs, shorteners, plain HTTP, unusual ports, `@` tricks, hidden characters, and visible-text/destination mismatches |
+| **Headers** | From and Reply-To domain mismatches, configured recognised-brand sender mismatches, and SPF, DKIM, or DMARC results when those headers are included |
+| **Evidence coverage** | Shows whether message text, rich/source details, links, and recognised headers were available, so a low score is not mistaken for a clean bill of health |
+| **Reports** | Shareable Summary and Full Evidence Report; both include coverage, omit the full message body, and explain what evidence was inspected |
+
+### Built to make the reasoning visible
+
+- **Explainable 0–100 risk score** based on fixed rules, with the rule points and triggered evidence available for review.
+- **Why this score?** breakdown groups findings by category and uses accessible progress indicators.
+- **Safe rich-email capture** reads copied HTML as inert text to extract link destinations. It never executes or displays that HTML.
+- **Raw email source mode** separates headers from the message body and decodes quoted-printable text before checking it. Base64-encoded MIME body parts are excluded from scoring and lower the stated coverage.
+- **Input guardrails** reject full webmail page source with guidance and stop inputs over 1,000,000 characters.
+- **Six fictional practice cases** use non-working `.example` domains or reserved test IP addresses.
+- **Accessibility options** include larger text and high contrast; these preferences stay in the visitor’s browser.
+
+## How to use it
+
+1. Open the [live demo](https://namitesh07.github.io/phishing-email-analyser/) or run the project locally.
+2. Paste message text, copied rich-email content, or the email’s raw message source.
+3. Review the score, triggered rules, link evidence, and assessment coverage.
+4. Verify important requests through the organisation’s official website, app, or a contact method you already trust.
+
+> [!TIP]
+> For Gmail, use **More → Show original** to get the email’s message source. The browser’s **View Page Source** for your inbox is the webmail interface, not the email itself, and is rejected with guidance.
+
+## Read the result carefully
+
+The score is a **rule-based triage signal, not a probability** and not proof that an email is legitimate or malicious. It reflects only the clues the analyser could inspect.
+
+| Coverage | What it means |
+| --- | --- |
+| **Limited evidence** | Only visible text, or otherwise incomplete evidence, was available. A low score does not confirm safety. |
+| **Partial evidence** | Some link or header information was available, but important context is missing. |
+| **Expanded evidence** | Visible message text was available together with recognised headers or rich-email data. Attachments and images remain uninspected. |
 
 ## Privacy by design
 
-All analysis takes place in the visitor’s browser.
+- Email content is processed in the browser and is **not uploaded or saved** by the app.
+- No backend, database, account, analytics, telemetry, AI service, external API, or tracking is used for analysis.
+- Pasted HTML and raw source are treated as text; they are never rendered, executed, or used to load remote images.
+- Extracted links are shown for inspection but are never visited. Attachments are never opened.
+- Only display preferences are saved locally in the browser.
 
-- No email content is uploaded or sent to a server.
-- No backend, database, user accounts, analytics, telemetry, AI provider, external API, or tracking is used.
-- Rich HTML and raw source are treated as text for inspection only; they are never rendered, executed, or used to load remote images.
-- The app never visits extracted links or opens attachments.
-- Display preferences are the only values saved locally in the browser. Pasted email content is not saved.
+## Run it locally
 
-## Understanding coverage
+No package installation, build step, or API key is needed.
 
-The score only reflects evidence that was actually available to inspect.
+```bash
+git clone https://github.com/Namitesh07/phishing-email-analyser.git
+cd phishing-email-analyser
+```
 
-| Coverage state | Meaning |
-| --- | --- |
-| **Limited evidence** | Only visible text, or otherwise incomplete evidence, was available. A low score does not confirm safety. |
-| **Partial evidence** | Some link or header information was available, but important context is still missing. |
-| **Expanded evidence** | Visible message text was available together with recognised headers or rich-email data. Attachments and images remain uninspected by design. |
+Open `index.html` in a modern browser. To run the regression checks, install Node.js and run:
 
-For important messages, verify independently through the organisation’s official website, app, or a contact method you already trust.
-
-## What the analyser does not do
-
-- It does not prove an email is safe or malicious.
-- It does not inspect attachment contents, images, external reputation data, or a sender’s mailbox.
-- It does not decode base64-encoded MIME body parts; these are excluded from scoring and reported as incomplete coverage.
-- It does not replace an organisation’s security process or an email provider’s phishing-report option.
-
-## Technology
-
-- HTML
-- CSS
-- Vanilla JavaScript
-
-No framework, dependency, backend, package installation, or API key is required. The project can be hosted as a static site, including GitHub Pages.
-
-## Run locally
-
-1. Download or clone this repository.
-2. Open `index.html` in a modern browser.
-3. Paste a fictional practice case or a suspicious email **without clicking its links or opening attachments**.
-4. Use **Raw email source** for the message source itself, such as Gmail’s **More → Show original** view. Do not paste your browser’s full “View Page Source” for the inbox; it contains the mail interface, not just the email.
-
-## Run regression checks
-
-The app has no runtime dependencies. If Node.js is installed, run the focused analyzer regression suite with:
-
-```sh
+```bash
 node tests/analyser.test.js
 ```
 
-## Safety note
+## Know the limits
 
-Never use this project to test a suspicious link or attachment. Do not reply with passwords, recovery codes, or MFA/OTP codes. Preserve the original message and report it through your email provider or organisation when appropriate.
+This project is an educational aid for deciding what to inspect next. It does **not**:
 
-## Usage
+- prove that an email is safe, authentic, or malicious;
+- cryptographically verify the sender or independently validate SPF, DKIM, or DMARC;
+- inspect attachment contents or image-based content;
+- decode base64-encoded MIME bodies, or fetch reputation data about links and senders;
+- replace your email provider’s reporting tools or your organisation’s security process.
 
-This repository is shared for portfolio and educational viewing. No licence is granted at this time.
+When a message asks for money, credentials, or urgent action, pause and confirm the request through a trusted channel. Do not click suspicious links, open unexpected attachments, or share passwords, recovery codes, or MFA/OTP codes.
+
+## Built with
+
+HTML · CSS · Vanilla JavaScript · Node.js regression tests
+
+No runtime libraries or third-party services are required by the analyser.
+
+---
+
+<div align="center">
+
+Created by **Namitesh Pandey** for learning and portfolio use.
+
+**Use the evidence. Keep the human in the loop.**
+
+</div>
+
+> Repository shared for portfolio and educational viewing. No licence is granted at this time.
