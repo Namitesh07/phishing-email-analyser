@@ -64,6 +64,56 @@ test("quoted-printable Google links are decoded before link scoring", () => {
   assert.match(result.findings.find((finding) => finding.id === "suspiciousUrl").detail, /services\.google\.com \(uses plain HTTP\)/);
 });
 
+test("base64 MIME bodies are excluded rather than scored as readable email text", () => {
+  const rawMessage = [
+    "From: Google <no-reply@google.com>",
+    "To: user@gmail.com",
+    "Subject: Account notice",
+    "MIME-Version: 1.0",
+    "Content-Type: multipart/alternative; boundary=mail-boundary",
+    "",
+    "--mail-boundary",
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    "PGh0bWw+PGJvZHk+PHA+UGxlYXNlIHZlcmlmeSB5b3VyIGFjY291bnQ8L3A+PC9ib2R5PjwvaHRtbD4=",
+    "--mail-boundary--"
+  ].join("\n");
+
+  const result = analyser.analyseEmail({ text: rawMessage, html: rawMessage, source: "raw-source" });
+  assert.equal(result.coverage.unsupportedTransferEncoding, true);
+  assert.equal(result.coverage.level, "partial");
+  assert.equal(result.coverage.textAvailable, false);
+  assert.equal(result.links.length, 0);
+  assert.equal(result.findings.some((finding) => finding.id === "credentialHarvesting"), false);
+});
+
+test("raw-source mode without recognised headers or rich HTML stays limited", () => {
+  const result = analyser.analyseEmail({
+    text: "A plain body without headers or links.",
+    html: "A plain body without headers or links.",
+    source: "raw-source"
+  });
+  assert.equal(result.coverage.level, "limited");
+});
+
+test("full report redacts URL paths and discloses matching excerpts", () => {
+  const email = [
+    "From: Example Service <notice@example.org>",
+    "Subject: Action required",
+    "",
+    "Please act now: https://example.org/customer/private-token?email=person%40example.com#account"
+  ].join("\n");
+  const result = analyser.analyseEmail(email);
+  const report = analyser.reportText(result, "full");
+
+  assert.match(report, /URL paths, query parameters, and fragments are redacted/i);
+  assert.match(report, /matching text excerpts can appear/i);
+  assert.match(report, /https:\/\/example\.org\/\[path redacted\]/);
+  assert.doesNotMatch(report, /private-token|person%40example\.com|#account/);
+  assert.match(report, /Score basis: fixed rule points, not a probability\./);
+});
+
 test("full webmail page source is rejected with safe Gmail instructions", () => {
   const pageSource = "<!doctype html><html><head><title>Inbox - Gmail</title><script>const shell='gmail menu toolbar';</script></head><body>Inbox</body></html>";
   const message = analyser.validateEvidence({ text: pageSource, html: pageSource, source: "raw-source" });

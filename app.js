@@ -938,16 +938,18 @@
     };
   }
 
-  function buildCoverage(evidence, split, links) {
+  function buildCoverage(evidence, split, links, bodyTextAvailable, unsupportedTransferEncoding, quotedPrintableDecoded) {
     var richHtml = hasHtmlMarkup(evidence.html);
     var rawSource = evidence.source === "raw-source";
-    var textAvailable = Boolean(inertHtmlText(split.body) || inertHtmlText(evidence.html));
+    var textAvailable = Boolean(bodyTextAvailable);
     var headersAvailable = Boolean(split.headerText);
     var level = "limited";
 
-    if (headersAvailable || richHtml || rawSource) {
+    if (unsupportedTransferEncoding) {
+      level = headersAvailable || richHtml || links.length ? "partial" : "limited";
+    } else if (textAvailable && (headersAvailable || richHtml)) {
       level = "expanded";
-    } else if (links.length) {
+    } else if (headersAvailable || richHtml || links.length) {
       level = "partial";
     }
 
@@ -958,6 +960,8 @@
       rawSource: rawSource,
       linksFound: links.length,
       headersAvailable: headersAvailable,
+      unsupportedTransferEncoding: Boolean(unsupportedTransferEncoding),
+      quotedPrintableDecoded: Boolean(quotedPrintableDecoded),
       attachmentsInspected: false
     };
   }
@@ -1013,8 +1017,15 @@
     var evidence = normaliseEvidence(input);
     var split = splitEmail(evidence.text);
     var headers = parseHeaders(split.headerText);
+    var contentType = getHeader(headers, "content-type");
+    var topLevelTransferEncoding = getHeader(headers, "content-transfer-encoding");
+    var hasBase64TransferEncoding = /^\s*base64\b/i.test(topLevelTransferEncoding) || (
+      /^\s*multipart\//i.test(contentType) && /(?:^|\n)content-transfer-encoding\s*:\s*base64\b/im.test(split.body)
+    );
     var hasQuotedPrintable = /(?:^|\n)content-transfer-encoding\s*:\s*quoted-printable\b/i.test(split.headerText + "\n" + split.body);
-    var messageSource = hasQuotedPrintable ? decodeQuotedPrintable(split.body) : split.body;
+    var messageSource = hasBase64TransferEncoding
+      ? ""
+      : hasQuotedPrintable ? decodeQuotedPrintable(split.body) : split.body;
     var messageBody = hasHtmlMarkup(messageSource) ? inertHtmlText(messageSource) : messageSource;
     var subject = getHeader(headers, "subject");
     var richPasteText = evidence.source === "raw-source" ? "" : (evidence.html ? inertHtmlText(evidence.html) : "");
@@ -1041,7 +1052,7 @@
       headersPresent: Boolean(split.headerText),
       links: links,
       headerSummary: buildHeaderSummary(headers, split.headerText),
-      coverage: buildCoverage(evidence, split, links)
+      coverage: buildCoverage(evidence, split, links, Boolean(messageBody || richPasteText), hasBase64TransferEncoding, hasQuotedPrintable && !hasBase64TransferEncoding)
     };
   }
 
@@ -1194,7 +1205,13 @@
   }
 
   function coverageSummary(coverage) {
+    if (coverage.unsupportedTransferEncoding) {
+      return "This message contains base64-encoded MIME content that this version does not decode. That content was excluded from scoring, so paste the visible message text for a fuller assessment.";
+    }
     if (coverage.rawSource) {
+      if (coverage.level === "limited") {
+        return "Raw source was supplied and analysed locally as inert text, but no recognised headers or rich HTML were available. A low score cannot confirm safety.";
+      }
       return "Raw source was supplied and analysed locally as inert text. It was never rendered, opened, or sent anywhere.";
     }
     if (coverage.richHtml && coverage.headersAvailable) {
@@ -1235,6 +1252,7 @@
     addCoverageRow(dom.coverageList, "Rich email or raw source", coverage.rawSource ? "Raw source pasted" : coverage.richHtml ? "Captured from paste" : "Not captured", coverage.rawSource || coverage.richHtml ? "available" : "missing");
     addCoverageRow(dom.coverageList, "Link destinations", coverage.linksFound ? coverage.linksFound + (coverage.linksFound === 1 ? " found" : " found") : "Not captured", coverage.linksFound ? "available" : "missing");
     addCoverageRow(dom.coverageList, "Recognised email headers", coverage.headersAvailable ? "Included" : "Not included", coverage.headersAvailable ? "available" : "missing");
+    addCoverageRow(dom.coverageList, "MIME body encoding", coverage.unsupportedTransferEncoding ? "Base64 not decoded; excluded from scoring" : coverage.quotedPrintableDecoded ? "Quoted-printable decoded" : "No unsupported base64 encoding detected", coverage.unsupportedTransferEncoding ? "missing" : coverage.quotedPrintableDecoded ? "available" : "neutral");
     addCoverageRow(dom.coverageList, "Attachment contents", "Not inspected", "neutral");
   }
 
@@ -1323,7 +1341,7 @@
     if (!parsed) {
       return "[unavailable URL]";
     }
-    return parsed.protocol + "//" + parsed.host + (parsed.pathname || "/");
+    return parsed.protocol + "//" + parsed.host + "/[path redacted]";
   }
 
   function addEvidenceFlag(container, label, tone) {
@@ -1425,6 +1443,7 @@
       "- Rich email or raw source: " + (result.coverage.rawSource ? "raw source pasted" : result.coverage.richHtml ? "captured from paste" : "not captured"),
       "- Link destinations: " + (result.coverage.linksFound ? result.coverage.linksFound + " found" : "not captured"),
       "- Recognised email headers: " + (result.coverage.headersAvailable ? "included" : "not included"),
+      "- MIME body encoding: " + (result.coverage.unsupportedTransferEncoding ? "base64 detected; body excluded from scoring" : result.coverage.quotedPrintableDecoded ? "quoted-printable decoded" : "no unsupported base64 encoding detected"),
       "- Attachment contents: not inspected"
     ];
   }
@@ -1435,6 +1454,7 @@
       "Generated locally in this browser. The pasted email body, link destinations, sender domains, and header values are not included.",
       "",
       "Risk score: " + result.score + "/100 (" + result.classification.label + ")",
+      "Score basis: fixed rule points, not a probability.",
       "Detected signals: " + result.findings.length,
       "Raw rule points: " + result.rawScore,
       ""
@@ -1460,9 +1480,10 @@
   function fullEvidenceReportText(result) {
     var lines = [
       "PHISHING EMAIL ANALYSER — LOCAL ASSESSMENT REPORT",
-      "Generated locally in this browser. The pasted email body is not included; URL query parameters and fragments are redacted.",
+      "Generated locally in this browser. The full pasted body is omitted, but selected matching text excerpts can appear in recorded indicators. URL paths, query parameters, and fragments are redacted.",
       "",
       "Risk score: " + result.score + "/100 (" + result.classification.label + ")",
+      "Score basis: fixed rule points, not a probability.",
       "Detected signals: " + result.findings.length,
       "Raw rule points: " + result.rawScore,
       ""
