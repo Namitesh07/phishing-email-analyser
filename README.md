@@ -1,118 +1,114 @@
 <div align="center">
 
+![Phishing Email Analyser — Email triage. Evidence, with context.](assets/readme-banner.svg)
+
 # Phishing Email Analyser
 
-### Email security triage, with evidence you can inspect.
+**Review the warning signs. Understand the evidence. Verify independently.**
 
-Review message clues, understand why rules raised them, and choose what to verify next — right in your browser.
+[**Open the live demo ↗**](https://namitesh07.github.io/phishing-email-analyser/) · [How to use it](docs/inputs.md) · [Scoring rules](docs/scoring-rules.md) · [Project limits](docs/limitations.md)
 
-[![Open the live demo](https://img.shields.io/badge/Live%20demo-Open%20analyser-1769aa?style=for-the-badge)](https://namitesh07.github.io/phishing-email-analyser/)
-![Browser-based](https://img.shields.io/badge/Analysis-Browser--based-168a72?style=for-the-badge)
-![No uploads](https://img.shields.io/badge/Email%20content-No%20uploads-5b6472?style=for-the-badge)
-
-**A privacy-first, educational triage tool — not an automated verdict on whether an email is safe.**
-
-[Try the demo](https://namitesh07.github.io/phishing-email-analyser/) · [How it works](#how-to-use-it) · [Privacy](#privacy-by-design) · [Limitations](#know-the-limits)
+[![Local analysis](assets/badge-local.svg)](docs/privacy.md)
+[![Explainable scoring](assets/badge-rules.svg)](docs/scoring-rules.md)
+[![Input guide](assets/badge-inputs.svg)](docs/inputs.md)
+[![Technology](assets/badge-stack.svg)](docs/development.md)
 
 </div>
 
 ---
 
-## The idea
+A browser-based email triage tool for learning and safer decision-making. Inspect visible social-engineering clues, review the rules behind each score, and see what evidence the analyser could—and could not—inspect.
 
-Phishing messages can look convincing, and a single score cannot prove who sent an email. This project helps people **spot and understand warning signs** by applying visible, fixed rules to the evidence they provide.
+> **Your email stays in your browser.** The analyser does not upload email content, open links, render pasted HTML, or inspect attachments.
 
-Analysis runs locally in the browser. The analyser does not upload the email, render pasted HTML, open links, or inspect attachments.
+## What you can do
 
-## What it can inspect
+| Investigate | Understand | Share carefully |
+| --- | --- | --- |
+| Review message text, captured link destinations, and supplied headers. | See the fixed scoring rules, evidence behind findings, and assessment coverage. | Copy or download a summary or a redacted full evidence report. |
 
-| Area | Checks and evidence |
-| --- | --- |
-| **Message content** | Urgency, threats, credential requests, payment requests, impersonation language, and risky attachment names |
-| **Links** | Actual destinations captured from rich email or source; lookalike and punycode patterns, misleading subdomains, raw IPs, shorteners, plain HTTP, unusual ports, `@` tricks, hidden characters, and visible-text/destination mismatches |
-| **Headers** | From and Reply-To domain mismatches, configured recognised-brand sender mismatches, and SPF, DKIM, or DMARC results when those headers are included |
-| **Evidence coverage** | Shows whether message text, rich/source details, links, and recognised headers were available, so a low score is not mistaken for a clean bill of health |
-| **Reports** | Shareable Summary and Full Evidence Report; both include coverage, omit the full message body, and explain what evidence was inspected |
+### Evidence the analyser can review
 
-### Built to make the reasoning visible
+- **Message clues:** urgency, threats, credential requests, payment language, impersonation, and risky attachment names.
+- **Link deception:** lookalike domains, punycode, misleading subdomains, raw IPs, shorteners, plain HTTP, unusual ports, `@` URL tricks, hidden characters, and visible-text/destination mismatches.
+- **Supplied headers:** From/Reply-To mismatches, configured brand/sender mismatches, and SPF, DKIM, or DMARC results when present in pasted headers.
+- **Coverage notes:** shows whether message text, rich/source content, links, and recognised headers were available. A low score with limited evidence is not proof of safety.
 
-- **Explainable 0–100 risk score** based on fixed rules, with the rule points and triggered evidence available for review.
-- **Why this score?** breakdown groups findings by category and uses accessible progress indicators.
-- **Safe rich-email capture** reads copied HTML as inert text to extract link destinations. It never executes or displays that HTML.
-- **Raw email source mode** separates headers from the message body and decodes quoted-printable text before checking it. Base64-encoded MIME body parts are excluded from scoring and lower the stated coverage.
-- **Input guardrails** reject full webmail page source with guidance and stop inputs over 1,000,000 characters.
-- **Six fictional practice cases** use non-working `.example` domains or reserved test IP addresses.
-- **Accessibility options** include larger text and high contrast; these preferences stay in the visitor’s browser.
+**Input modes:** visible email text · copied rich email · raw email source. See the [input guide](docs/inputs.md) for safe copying instructions and supported source formats.
 
-## How to use it
+## Start in four steps
 
-1. Open the [live demo](https://namitesh07.github.io/phishing-email-analyser/) or run the project locally.
-2. Paste message text, copied rich-email content, or the email’s raw message source.
-3. Review the score, triggered rules, link evidence, and assessment coverage.
-4. Verify important requests through the organisation’s official website, app, or a contact method you already trust.
+1. **Open the [live demo](https://namitesh07.github.io/phishing-email-analyser/)** or run the app locally.
+2. **Paste evidence** from the message itself: visible text, copied rich email, or raw email source.
+3. **Review the result:** score, triggered rules, link/header evidence, and coverage.
+4. **Verify outside the message** using an organisation’s official website, app, or a contact method you already trust.
 
 > [!TIP]
-> For Gmail, use **More → Show original** to get the email’s message source. The browser’s **View Page Source** for your inbox is the webmail interface, not the email itself, and is rejected with guidance.
+> For Gmail, use **More → Show original** to copy the email’s message source. The browser’s **View Page Source** for your inbox is the webmail interface, not the email, and is rejected with guidance.
 
-## Read the result carefully
+<details>
+<summary><strong>Prefer to run it locally?</strong></summary>
 
-The score is a **rule-based triage signal, not a probability** and not proof that an email is legitimate or malicious. It reflects only the clues the analyser could inspect.
-
-| Coverage | What it means |
-| --- | --- |
-| **Limited evidence** | Only visible text, or otherwise incomplete evidence, was available. A low score does not confirm safety. |
-| **Partial evidence** | Some link or header information was available, but important context is missing. |
-| **Expanded evidence** | Visible message text was available together with recognised headers or rich-email data. Attachments and images remain uninspected. |
-
-## Privacy by design
-
-- Email content is processed in the browser and is **not uploaded or saved** by the app.
-- No backend, database, account, analytics, telemetry, AI service, external API, or tracking is used for analysis.
-- Pasted HTML and raw source are treated as text; they are never rendered, executed, or used to load remote images.
-- Extracted links are shown for inspection but are never visited. Attachments are never opened.
-- Only display preferences are saved locally in the browser.
-
-## Run it locally
-
-No package installation, build step, or API key is needed.
+No build step or package installation is needed:
 
 ```bash
 git clone https://github.com/Namitesh07/phishing-email-analyser.git
 cd phishing-email-analyser
 ```
 
-Open `index.html` in a modern browser. To run the regression checks, install Node.js and run:
+Open `index.html` in a modern browser. To run the regression checks, install Node.js and use:
 
 ```bash
 node tests/analyser.test.js
 ```
 
-## Know the limits
+See [local development and tests](docs/development.md).
 
-This project is an educational aid for deciding what to inspect next. It does **not**:
+</details>
 
-- prove that an email is safe, authentic, or malicious;
-- cryptographically verify the sender or independently validate SPF, DKIM, or DMARC;
-- inspect attachment contents or image-based content;
-- decode base64-encoded MIME bodies, or fetch reputation data about links and senders;
-- replace your email provider’s reporting tools or your organisation’s security process.
+## Read the score in context
 
-When a message asks for money, credentials, or urgent action, pause and confirm the request through a trusted channel. Do not click suspicious links, open unexpected attachments, or share passwords, recovery codes, or MFA/OTP codes.
+The 0–100 score adds fixed points for detected rules and is capped at 100. It is a **triage signal, not a probability or a verdict** that an email is legitimate or malicious.
 
-## Built with
+| Score | Label |
+| --- | --- |
+| 0–19 | Low risk |
+| 20–59 | Suspicious |
+| 60–100 | High risk |
 
-HTML · CSS · Vanilla JavaScript · Node.js regression tests
+Coverage describes the evidence available during that assessment: **Limited**, **Partial**, or **Expanded**. Missing headers, links, images, or attachment contents can leave important context out. Read [how scoring works](docs/scoring-rules.md) and [known limitations](docs/limitations.md).
 
-No runtime libraries or third-party services are required by the analyser.
+## Explore further
+
+| Use the analyser | Understand the result | Project details |
+| --- | --- | --- |
+| [Inputs and safe copying](docs/inputs.md) | [Scoring rules and score bands](docs/scoring-rules.md) | [Privacy by design](docs/privacy.md) |
+| [Reports and redaction](docs/reports.md) | [Coverage and evidence gaps](docs/limitations.md#assessment-coverage) | [Development and tests](docs/development.md) |
+
+## Privacy by design
+
+- Email analysis happens in the visitor’s browser. Email content is not uploaded or saved by the app.
+- No backend, account, analytics, telemetry, AI service, external API, or tracking is used for analysis.
+- Copied HTML and raw source are treated as text; the analyser does not execute them or load remote images.
+- Extracted links are shown as text and are never visited. Attachments are not opened.
+- Only display preferences are stored locally in the browser.
+
+More detail: [privacy notes](docs/privacy.md) · [report contents and redaction](docs/reports.md).
+
+## Read findings with care
+
+This is an educational triage tool. A legitimate email may trigger a rule, and a malicious email may not contain clues the analyser recognises. It does not prove sender identity, verify authentication cryptographically, inspect attachment contents, or check live link reputation. Confirm important requests using a channel you already trust.
+
+Never click a suspicious link, open an unexpected attachment, or share passwords, recovery codes, or MFA/OTP codes in response to an email.
 
 ---
 
 <div align="center">
 
-Created by **Namitesh Pandey** for learning and portfolio use.
+Created by **[Namitesh Pandey](https://github.com/Namitesh07)** · Cybersecurity learning and portfolio project
 
 **Use the evidence. Keep the human in the loop.**
 
-</div>
+<sub>Shared for portfolio and educational viewing. No licence is granted at this time.</sub>
 
-> Repository shared for portfolio and educational viewing. No licence is granted at this time.
+</div>

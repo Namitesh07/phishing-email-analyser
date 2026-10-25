@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="38" viewBox="0 0 250 38" role="img" aria-labelledby="t d">
+  <title id="t">Analysis stays in browser</title><desc id="d">Privacy: analysis stays in browser.</desc>
+  <rect width="250" height="38" rx="7" fill="#10263a"/><path d="M7 0h82v38H7a7 7 0 0 1-7-7V7a7 7 0 0 1 7-7Z" fill="#1a3a50"/>
+  <text x="48" y="24" text-anchor="middle" fill="#bbd3df" font-family="Arial,sans-serif" font-size="11" font-weight="700" letter-spacing=".5">PRIVACY</text>
+  <circle cx="105" cy="19" r="4" fill="#67dfc4"/><text x="116" y="24" fill="#f1faf8" font-family="Arial,sans-serif" font-size="12" font-weight="700">STAYS IN BROWSER</text>
+</svg>
